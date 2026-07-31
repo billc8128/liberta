@@ -1,0 +1,37 @@
+import { currentSession } from "@/lib/auth/session";
+import {
+  getOwnedProject,
+  ProjectAccessError,
+} from "@/server/projects/service";
+import { DaytonaSandboxRuntime } from "@/server/sandbox/daytona";
+
+interface ProjectRouteContext {
+  params: Promise<{ projectId: string }>;
+}
+
+export async function GET(_request: Request, context: ProjectRouteContext) {
+  const session = await currentSession();
+  if (!session) {
+    return Response.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  }
+
+  try {
+    const { projectId } = await context.params;
+    const project = await getOwnedProject(session.user.id, projectId);
+    if (!project.sandboxId || project.status !== "ready") {
+      return Response.json({ error: "PREVIEW_NOT_READY" }, { status: 409 });
+    }
+
+    const url = await new DaytonaSandboxRuntime().previewUrl(
+      project.sandboxId,
+      project.previewPort,
+    );
+    return Response.json({ url });
+  } catch (error) {
+    if (error instanceof ProjectAccessError) {
+      return Response.json({ error: "PROJECT_NOT_FOUND" }, { status: 404 });
+    }
+    console.error("Preview URL failed", error);
+    return Response.json({ error: "PREVIEW_FAILED" }, { status: 503 });
+  }
+}

@@ -1,36 +1,43 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Project L
 
-## Getting Started
+Project L is an agent-first site maker. A project combines a restrained conversation interface, one Pi coding agent, one isolated Daytona environment, and a real browser preview.
 
-First, run the development server:
+## Stack
+
+- Next.js 16, React 19, TypeScript
+- Better Auth with email and password for the MVP
+- Pi SDK with Volcengine Ark Agent Plan
+- Daytona private sandboxes
+- Drizzle ORM with AnyHost Postgres
+- BullMQ with AnyHost Redis
+- AnyHost application hosting for the web process and agent worker
+
+See [docs/architecture.md](./docs/architecture.md) for boundaries and security decisions.
+
+## Local development
+
+Requirements: Node.js 22.19 or newer and pnpm 10.
+
+1. Copy `.env.example` to `.env.local` and provide the database, Redis, auth, Daytona, and Ark credentials.
+2. Generate and apply the database migration.
+3. Start the web application and worker in separate terminals.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm db:generate
+pnpm db:migrate
 pnpm dev
-# or
-bun dev
+pnpm worker:dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+In production, `pnpm start` supervises the Next.js server and BullMQ worker in one AnyHost application runtime. They remain separate processes so agent work never runs inside an HTTP request.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+The home screen deliberately disables project creation while any required runtime credential is missing. It never substitutes a mock project or preview.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Quality gates
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+pnpm test
+pnpm typecheck
+pnpm lint
+pnpm build
+```

@@ -1,0 +1,146 @@
+import "server-only";
+
+import {
+  createAgentSession,
+  createExtensionRuntime,
+  ModelRuntime,
+  SessionManager,
+  SettingsManager,
+  type ResourceLoader,
+} from "@earendil-works/pi-coding-agent";
+
+import { arkEnv } from "@/lib/env/server";
+import { createDaytonaTools } from "@/server/agent/daytona-tools";
+import type {
+  AgentRuntime,
+  AgentRuntimeEvent,
+  AgentTurnInput,
+} from "@/server/agent/runtime";
+import type { SandboxRuntime } from "@/server/sandbox/runtime";
+
+const PROVIDER_ID = "volcengine-agent-plan";
+
+export class PiAgentRuntime implements AgentRuntime {
+  constructor(private readonly sandboxes: SandboxRuntime) {}
+
+  async runTurn(
+    input: AgentTurnInput,
+    onEvent: (event: AgentRuntimeEvent) => Promise<void> | void,
+  ) {
+    const env = arkEnv();
+    const sandbox = await this.sandboxes.ensureRunning(input.sandboxId);
+    const modelRuntime = await ModelRuntime.create({
+      modelsPath: null,
+      allowModelNetwork: false,
+    });
+
+    modelRuntime.registerProvider(PROVIDER_ID, {
+      name: "Volcengine Agent Plan",
+      baseUrl: env.ARK_BASE_URL,
+      apiKey: "$ARK_API_KEY",
+      authHeader: true,
+      api: "openai-completions",
+      models: [
+        {
+          id: env.ARK_MODEL_ID,
+          name: env.ARK_MODEL_ID,
+          reasoning: false,
+          input: ["text", "image"],
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          contextWindow: 128_000,
+          maxTokens: 32_000,
+        },
+      ],
+    });
+    await modelRuntime.setRuntimeApiKey(PROVIDER_ID, env.ARK_API_KEY);
+
+    const model = modelRuntime.getModel(PROVIDER_ID, env.ARK_MODEL_ID);
+    if (!model) {
+      throw new Error(`Pi could not register Ark model ${env.ARK_MODEL_ID}.`);
+    }
+
+    const { session } = await createAgentSession({
+      cwd: input.workdir,
+      model,
+      modelRuntime,
+      thinkingLevel: "off",
+      noTools: "builtin",
+      customTools: createDaytonaTools(sandbox, input.workdir),
+      resourceLoader: projectResourceLoader(input.workdir),
+      sessionManager: SessionManager.inMemory(input.workdir),
+      settingsManager: SettingsManager.inMemory({
+        compaction: { enabled: true },
+        retry: { enabled: true, maxRetries: 2 },
+      }),
+    });
+
+    let eventPipeline = Promise.resolve();
+    const emit = (event: AgentRuntimeEvent) => {
+      eventPipeline = eventPipeline.then(() => onEvent(event));
+    };
+
+    const unsubscribe = session.subscribe((event) => {
+      if (
+        event.type === "message_update" &&
+        event.assistantMessageEvent.type === "text_delta"
+      ) {
+        emit({
+          type: "text_delta",
+          text: event.assistantMessageEvent.delta,
+        });
+      }
+
+      if (event.type === "tool_execution_start") {
+        emit({
+          type: "tool_started",
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+        });
+      }
+
+      if (event.type === "tool_execution_end") {
+        emit({
+          type: "tool_finished",
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+          isError: event.isError,
+        });
+      }
+    });
+
+    try {
+      await session.prompt(input.prompt, {
+        expandPromptTemplates: false,
+        source: "rpc",
+      });
+      await eventPipeline;
+    } finally {
+      unsubscribe();
+      session.dispose();
+    }
+  }
+}
+
+function projectResourceLoader(workdir: string): ResourceLoader {
+  return {
+    getExtensions: () => ({
+      extensions: [],
+      errors: [],
+      runtime: createExtensionRuntime(),
+    }),
+    getSkills: () => ({ skills: [], diagnostics: [] }),
+    getPrompts: () => ({ prompts: [], diagnostics: [] }),
+    getThemes: () => ({ themes: [], diagnostics: [] }),
+    getAgentsFiles: () => ({ agentsFiles: [] }),
+    getSystemPrompt: () => `You are the coding agent for one Project L website.
+
+Your only working directory is ${workdir}. Use the provided read, write, edit, and bash tools to inspect and change the real Daytona sandbox.
+
+Build a complete, runnable website from the user's request. If the directory is empty, initialize the smallest appropriate TypeScript web project before implementing it. Keep the development server on port 3000 and bind it to 0.0.0.0. Verify your work with the project's own checks. Do not claim a change was made unless the corresponding tool completed successfully. Keep the final response concise and describe only real results.`,
+    getSystemPromptSource: () => undefined,
+    getAppendSystemPrompt: () => [],
+    getAppendSystemPromptSources: () => [],
+    extendResources: () => {},
+    reload: async () => {},
+  };
+}
