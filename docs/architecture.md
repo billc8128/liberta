@@ -34,7 +34,7 @@ There is no generated example site, fake activity feed, or synthetic agent respo
 
 HTTP handlers authenticate the user, persist the requested change, and enqueue only an `agentRunId`. A separate BullMQ worker loads authoritative project state from Postgres and performs the Pi/Daytona work. This makes retries idempotent and keeps long-running coding sessions outside the request lifecycle.
 
-For the first deployable vertical slice, `pnpm start` runs a small process supervisor that starts both `next start` and the worker inside one AnyHost application runtime. The process boundary is already explicit, so the worker can move to its own AnyHost service later without changing the queue or domain model.
+For the first deployable vertical slice, `pnpm start` applies committed Drizzle migrations and then runs a small process supervisor that starts both `next start` and the worker inside one AnyHost application runtime. The process boundary is already explicit, so the worker can move to its own AnyHost service later without changing the queue or domain model.
 
 ## Security boundary
 

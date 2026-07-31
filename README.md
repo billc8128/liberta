@@ -29,7 +29,7 @@ pnpm dev
 pnpm worker:dev
 ```
 
-In production, `pnpm start` supervises the Next.js server and BullMQ worker in one AnyHost application runtime. They remain separate processes so agent work never runs inside an HTTP request.
+In production, `pnpm start` applies pending Drizzle migrations, then supervises the Next.js server and BullMQ worker in one AnyHost application runtime. They remain separate processes so agent work never runs inside an HTTP request.
 
 The home screen deliberately disables project creation while any required runtime credential is missing. It never substitutes a mock project or preview.
 
