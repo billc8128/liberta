@@ -33,6 +33,8 @@ In production, `pnpm start` applies pending Drizzle migrations, then supervises 
 
 The home screen deliberately disables project creation while any required runtime credential is missing. It never substitutes a mock project or preview.
 
+`GET /health` is the process liveness check used by AnyHost. `GET /api/health` is the stricter dependency-readiness check used by the product.
+
 ## Quality gates
 
 ```bash

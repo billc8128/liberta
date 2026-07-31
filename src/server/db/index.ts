@@ -5,12 +5,13 @@ import postgres from "postgres";
 
 import { databaseEnv } from "@/lib/env/server";
 import * as schema from "@/server/db/schema";
+import { postgresJsUrl } from "@/server/db/url";
 
 let client: ReturnType<typeof postgres> | undefined;
 
 export function database() {
   if (!client) {
-    client = postgres(databaseEnv().DATABASE_URL, {
+    client = postgres(postgresJsUrl(databaseEnv().DATABASE_URL), {
       max: 10,
       prepare: false,
     });
