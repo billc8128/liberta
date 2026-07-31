@@ -15,6 +15,7 @@ export async function migrateDatabase() {
   try {
     await migrate(drizzle(client), {
       migrationsFolder: path.join(process.cwd(), "drizzle"),
+      migrationsSchema: "public",
     });
   } finally {
     await client.end();
