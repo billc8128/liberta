@@ -4,8 +4,16 @@ export function previewCommand(port: number) {
     `exec node_modules/.bin/next dev --hostname 0.0.0.0 --port ${port};`,
     "elif [ -x node_modules/.bin/vite ]; then",
     `exec node_modules/.bin/vite --host 0.0.0.0 --port ${port};`,
-    "else",
+    "elif [ -f package.json ]; then",
     `export HOST=0.0.0.0 PORT=${port}; exec npm run dev;`,
+    "elif [ -f index.html ]; then",
+    `exec python3 -m http.server ${port} --bind 0.0.0.0;`,
+    "else",
+    "exit 1;",
     "fi",
   ].join(" ");
+}
+
+export function runnableWebsiteCheckCommand() {
+  return "test -f package.json || test -f index.html";
 }

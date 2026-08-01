@@ -14,6 +14,7 @@ import {
 import { failAgentRun } from "@/server/projects/service";
 import { promptWithConversation } from "@/server/projects/prompt";
 import { DaytonaSandboxRuntime } from "@/server/sandbox/daytona";
+import { runnableWebsiteCheckCommand } from "@/server/sandbox/preview-command";
 
 export async function executeAgentRun(runId: string) {
   const db = database();
@@ -99,7 +100,7 @@ export async function executeAgentRun(runId: string) {
     );
     const projectCheck = await sandboxes.execute(
       project.sandboxId!,
-      "test -f package.json",
+      runnableWebsiteCheckCommand(),
       project.sandboxWorkdir!,
       10,
     );
