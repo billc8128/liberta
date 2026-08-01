@@ -18,11 +18,13 @@ export async function GET(_request: Request, context: ProjectRouteContext) {
   try {
     const { projectId } = await context.params;
     const project = await getOwnedProject(session.user.id, projectId);
-    if (!project.sandboxId || project.status !== "ready") {
+    if (!project.sandboxId || !project.sandboxWorkdir || project.status !== "ready") {
       return Response.json({ error: "PREVIEW_NOT_READY" }, { status: 409 });
     }
 
-    const url = await new DaytonaSandboxRuntime().previewUrl(
+    const sandboxes = new DaytonaSandboxRuntime();
+    await sandboxes.startPreview(project.sandboxId, project.sandboxWorkdir);
+    const url = await sandboxes.previewUrl(
       project.sandboxId,
       project.previewPort,
     );
