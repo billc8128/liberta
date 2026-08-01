@@ -18,7 +18,7 @@ export function HomeComposer({ runtimeReady, signedIn }: HomeComposerProps) {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const value = prompt.trim();
-    if (!runtimeReady || value.length < 10 || submitting) return;
+    if (!runtimeReady || !value || submitting) return;
 
     setError(undefined);
     if (!signedIn) {
@@ -66,7 +66,7 @@ export function HomeComposer({ runtimeReady, signedIn }: HomeComposerProps) {
             type="submit"
             className="send-button"
             aria-label="Start building"
-            disabled={!runtimeReady || submitting || prompt.trim().length < 10}
+            disabled={!runtimeReady || submitting || !prompt.trim()}
             title={runtimeReady ? "Start building" : "Workspace is connecting"}
           >
             <ArrowUp aria-hidden="true" size={20} strokeWidth={2.2} />

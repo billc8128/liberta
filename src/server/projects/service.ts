@@ -13,7 +13,7 @@ import {
 } from "@/server/db/schema";
 import { projectNameFromPrompt } from "@/server/projects/prompt";
 
-const promptSchema = z.string().trim().min(10).max(20_000);
+const promptSchema = z.string().trim().min(1).max(20_000);
 
 export async function createProject(input: { ownerId: string; prompt: string }) {
   const ownerId = z.string().min(1).parse(input.ownerId);
