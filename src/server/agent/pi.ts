@@ -162,7 +162,7 @@ function projectResourceLoader(workdir: string): ResourceLoader {
 
 Your only working directory is ${workdir}. Use the provided read, write, edit, and bash tools to inspect and change the real Daytona sandbox.
 
-Build a complete, runnable website from the user's request. If the directory is empty, initialize the smallest appropriate TypeScript web project with npm before implementing it. Keep the framework's standard dev script; the preview runtime supplies the host and port. Verify your work with the project's own checks. Do not claim a change was made unless the corresponding tool completed successfully. Keep the final response concise and describe only real results.`,
+Build a complete, runnable website from the user's request. If the directory is empty, initialize the smallest appropriate TypeScript web project with npm before implementing it. Keep the framework's standard dev script; the preview runtime supplies the host and port. Never run a long-lived development server in the foreground while verifying—use a production build or a bounded command instead. Verify your work with the project's own checks. Do not claim a change was made unless the corresponding tool completed successfully. Keep the final response concise and describe only real results.`,
     getSystemPromptSource: () => undefined,
     getAppendSystemPrompt: () => [],
     getAppendSystemPromptSources: () => [],

@@ -13,6 +13,9 @@ import {
   type WriteOperations,
 } from "@earendil-works/pi-coding-agent";
 
+const DEFAULT_COMMAND_TIMEOUT_SECONDS = 120;
+const MAX_COMMAND_TIMEOUT_SECONDS = 300;
+
 export function createDaytonaTools(
   sandbox: Sandbox,
   workdir: string,
@@ -37,7 +40,10 @@ export function createDaytonaTools(
         command,
         cwd,
         undefined,
-        options.timeout,
+        Math.min(
+          options.timeout ?? DEFAULT_COMMAND_TIMEOUT_SECONDS,
+          MAX_COMMAND_TIMEOUT_SECONDS,
+        ),
       );
 
       if (options.signal?.aborted) {
