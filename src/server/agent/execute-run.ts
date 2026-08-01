@@ -2,6 +2,7 @@ import "server-only";
 
 import { and, asc, eq } from "drizzle-orm";
 
+import { simpleGreetingReply } from "@/server/agent/conversation";
 import { PiAgentRuntime } from "@/server/agent/pi";
 import type { AgentRuntimeEvent } from "@/server/agent/runtime";
 import { database } from "@/server/db";
@@ -49,9 +50,28 @@ export async function executeAgentRun(runId: string) {
       .where(eq(projects.id, record.project.id));
   });
 
-  const sandboxes = new DaytonaSandboxRuntime();
+  let response = "";
+  let responseMessageId: string | undefined;
 
   try {
+    const conversation = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.projectId, record.project.id))
+      .orderBy(asc(messages.createdAt));
+    const latestUserMessage = conversation.findLast(
+      (message) => message.role === "user",
+    );
+    const greetingReply = latestUserMessage
+      ? simpleGreetingReply(latestUserMessage.content)
+      : undefined;
+
+    if (greetingReply) {
+      await completeTextOnlyRun(runId, record.project.id, greetingReply);
+      return;
+    }
+
+    const sandboxes = new DaytonaSandboxRuntime();
     let project = record.project;
     if (!project.sandboxId || !project.sandboxWorkdir) {
       const sandbox = await sandboxes.create(project.id);
@@ -67,20 +87,40 @@ export async function executeAgentRun(runId: string) {
       project = updated;
     }
 
-    const conversation = await db
-      .select()
-      .from(messages)
-      .where(eq(messages.projectId, project.id))
-      .orderBy(asc(messages.createdAt));
     const agent = new PiAgentRuntime(sandboxes);
-    let response = "";
     let sequence = 0;
+    let usedTool = false;
+    let lastStreamPersistedAt = 0;
+
+    const [assistantMessage] = await db
+      .insert(messages)
+      .values({
+        projectId: project.id,
+        role: "assistant",
+        status: "streaming",
+        content: "",
+      })
+      .returning();
+    responseMessageId = assistantMessage.id;
+    await db
+      .update(agentRuns)
+      .set({ responseMessageId })
+      .where(eq(agentRuns.id, runId));
 
     const recordEvent = async (event: AgentRuntimeEvent) => {
       if (event.type === "text_delta") {
         response += event.text;
+        const now = Date.now();
+        if (now - lastStreamPersistedAt >= 250) {
+          lastStreamPersistedAt = now;
+          await db
+            .update(messages)
+            .set({ content: response })
+            .where(eq(messages.id, assistantMessage.id));
+        }
         return;
       }
+      usedTool = true;
       sequence += 1;
       await db.insert(agentRunEvents).values({
         runId,
@@ -104,26 +144,26 @@ export async function executeAgentRun(runId: string) {
       project.sandboxWorkdir!,
       10,
     );
-    if (projectCheck.exitCode !== 0) {
+    const hasRunnableWebsite = projectCheck.exitCode === 0;
+    if (!hasRunnableWebsite && (usedTool || !response.trim())) {
       throw new Error("The agent finished without creating a runnable website.");
     }
-    await sandboxes.startPreview(project.sandboxId!, project.sandboxWorkdir!);
+    if (hasRunnableWebsite) {
+      await sandboxes.startPreview(project.sandboxId!, project.sandboxWorkdir!);
+    }
 
-    const [assistantMessage] = await db
-      .insert(messages)
-      .values({
-        projectId: project.id,
-        role: "assistant",
-        content: response.trim() || "The requested changes are running in the preview.",
-      })
-      .returning();
+    const finalResponse =
+      response.trim() || "The requested changes are running in the preview.";
+    await db
+      .update(messages)
+      .set({ status: "completed", content: finalResponse })
+      .where(eq(messages.id, assistantMessage.id));
 
     await db.transaction(async (transaction) => {
       await transaction
         .update(agentRuns)
         .set({
           status: "completed",
-          responseMessageId: assistantMessage.id,
           completedAt: new Date(),
         })
         .where(eq(agentRuns.id, runId));
@@ -133,6 +173,15 @@ export async function executeAgentRun(runId: string) {
         .where(eq(projects.id, project.id));
     });
   } catch (error) {
+    if (responseMessageId) {
+      await db
+        .update(messages)
+        .set({
+          status: "failed",
+          content: response.trim() || "The agent stopped before it could reply.",
+        })
+        .where(eq(messages.id, responseMessageId));
+    }
     await failAgentRun(
       runId,
       "AGENT_RUN_FAILED",
@@ -140,4 +189,30 @@ export async function executeAgentRun(runId: string) {
     );
     throw error;
   }
+}
+
+async function completeTextOnlyRun(
+  runId: string,
+  projectId: string,
+  content: string,
+) {
+  const db = database();
+  await db.transaction(async (transaction) => {
+    const [assistantMessage] = await transaction
+      .insert(messages)
+      .values({ projectId, role: "assistant", content })
+      .returning();
+    await transaction
+      .update(agentRuns)
+      .set({
+        status: "completed",
+        responseMessageId: assistantMessage.id,
+        completedAt: new Date(),
+      })
+      .where(eq(agentRuns.id, runId));
+    await transaction
+      .update(projects)
+      .set({ status: "ready", updatedAt: new Date() })
+      .where(eq(projects.id, projectId));
+  });
 }
