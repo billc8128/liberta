@@ -11,11 +11,6 @@ const authSchema = databaseSchema.extend({
   BETTER_AUTH_URL: z.string().url(),
 });
 
-const queueSchema = z.object({
-  REDIS_URL: z.string().url(),
-  REDIS_KEY_PREFIX: z.string().min(1),
-});
-
 const daytonaSchema = z.object({
   DAYTONA_API_KEY: z.string().min(1),
   DAYTONA_API_URL: z.string().url().optional(),
@@ -43,10 +38,6 @@ export function authEnv() {
   return authSchema.parse(process.env);
 }
 
-export function queueEnv() {
-  return queueSchema.parse(process.env);
-}
-
 export function arkEnv() {
   return arkSchema.parse(process.env);
 }
@@ -55,7 +46,6 @@ export function runtimeReadiness() {
   return {
     database: databaseSchema.safeParse(process.env).success,
     auth: authSchema.safeParse(process.env).success,
-    queue: queueSchema.safeParse(process.env).success,
     sandbox: daytonaSchema.safeParse(process.env).success,
     model: arkSchema.safeParse(process.env).success,
   };

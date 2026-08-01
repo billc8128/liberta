@@ -1,6 +1,6 @@
 import "server-only";
 
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 
 import { PiAgentRuntime } from "@/server/agent/pi";
 import type { AgentRuntimeEvent } from "@/server/agent/runtime";
@@ -17,6 +17,20 @@ import { DaytonaSandboxRuntime } from "@/server/sandbox/daytona";
 
 export async function executeAgentRun(runId: string) {
   const db = database();
+  const [claimedRun] = await db
+    .update(agentRuns)
+    .set({
+      status: "running",
+      startedAt: new Date(),
+      completedAt: null,
+      errorCode: null,
+      errorMessage: null,
+    })
+    .where(and(eq(agentRuns.id, runId), eq(agentRuns.status, "queued")))
+    .returning({ id: agentRuns.id });
+
+  if (!claimedRun) return;
+
   const [record] = await db
     .select({ run: agentRuns, project: projects })
     .from(agentRuns)
@@ -25,20 +39,9 @@ export async function executeAgentRun(runId: string) {
     .limit(1);
 
   if (!record) throw new Error(`Agent run ${runId} does not exist.`);
-  if (record.run.status === "completed") return;
 
   await db.transaction(async (transaction) => {
     await transaction.delete(agentRunEvents).where(eq(agentRunEvents.runId, runId));
-    await transaction
-      .update(agentRuns)
-      .set({
-        status: "running",
-        startedAt: new Date(),
-        completedAt: null,
-        errorCode: null,
-        errorMessage: null,
-      })
-      .where(eq(agentRuns.id, runId));
     await transaction
       .update(projects)
       .set({ status: "running", updatedAt: new Date() })

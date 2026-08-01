@@ -3,11 +3,9 @@ import { ZodError } from "zod";
 import { currentSession } from "@/lib/auth/session";
 import {
   addProjectMessage,
-  failAgentRun,
   ProjectAccessError,
   ProjectBusyError,
 } from "@/server/projects/service";
-import { enqueueAgentRun } from "@/server/queue/agent-runs";
 
 interface ProjectRouteContext {
   params: Promise<{ projectId: string }>;
@@ -27,18 +25,6 @@ export async function POST(request: Request, context: ProjectRouteContext) {
       projectId,
       prompt: typeof body.prompt === "string" ? body.prompt : "",
     });
-
-    try {
-      await enqueueAgentRun(run.id);
-    } catch (error) {
-      await failAgentRun(
-        run.id,
-        "QUEUE_UNAVAILABLE",
-        error instanceof Error ? error.message : "Agent queue is unavailable.",
-      );
-      console.error("Project message queue unavailable", error);
-      return Response.json({ error: "QUEUE_UNAVAILABLE" }, { status: 503 });
-    }
 
     return Response.json({ runId: run.id }, { status: 202 });
   } catch (error) {

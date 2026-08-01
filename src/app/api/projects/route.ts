@@ -1,8 +1,7 @@
 import { ZodError } from "zod";
 
 import { currentSession } from "@/lib/auth/session";
-import { createProject, failAgentRun } from "@/server/projects/service";
-import { enqueueAgentRun } from "@/server/queue/agent-runs";
+import { createProject } from "@/server/projects/service";
 
 export async function POST(request: Request) {
   const session = await currentSession();
@@ -16,18 +15,6 @@ export async function POST(request: Request) {
       ownerId: session.user.id,
       prompt: typeof body.prompt === "string" ? body.prompt : "",
     });
-
-    try {
-      await enqueueAgentRun(run.id);
-    } catch (error) {
-      await failAgentRun(
-        run.id,
-        "QUEUE_UNAVAILABLE",
-        error instanceof Error ? error.message : "Agent queue is unavailable.",
-      );
-      console.error("Project queue unavailable", error);
-      return Response.json({ error: "QUEUE_UNAVAILABLE" }, { status: 503 });
-    }
 
     return Response.json({ projectId: project.id, runId: run.id }, { status: 202 });
   } catch (error) {
