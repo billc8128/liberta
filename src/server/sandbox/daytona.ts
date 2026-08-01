@@ -99,11 +99,11 @@ export class DaytonaSandboxRuntime implements SandboxRuntime {
     }
 
     await sandbox.process.executeSessionCommand(PREVIEW_SESSION, {
-      command: `cd ${shellQuote(workdir)} && pnpm dev --hostname 0.0.0.0 --port ${DEFAULT_PREVIEW_PORT}`,
+      command: `cd ${shellQuote(workdir)} && npm run dev`,
       runAsync: true,
     });
 
-    for (let attempt = 0; attempt < 20; attempt += 1) {
+    for (let attempt = 0; attempt < 60; attempt += 1) {
       if (await previewResponds(sandbox)) {
         return;
       }

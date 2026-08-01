@@ -97,6 +97,15 @@ export async function executeAgentRun(runId: string) {
       },
       recordEvent,
     );
+    const projectCheck = await sandboxes.execute(
+      project.sandboxId!,
+      "test -f package.json",
+      project.sandboxWorkdir!,
+      10,
+    );
+    if (projectCheck.exitCode !== 0) {
+      throw new Error("The agent finished without creating a runnable website.");
+    }
     await sandboxes.startPreview(project.sandboxId!, project.sandboxWorkdir!);
 
     const [assistantMessage] = await db

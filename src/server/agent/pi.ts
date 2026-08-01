@@ -75,6 +75,8 @@ export class PiAgentRuntime implements AgentRuntime {
     });
 
     let eventPipeline = Promise.resolve();
+    let emittedText = false;
+    let modelError: string | undefined;
     const emit = (event: AgentRuntimeEvent) => {
       eventPipeline = eventPipeline.then(() => onEvent(event));
     };
@@ -84,10 +86,31 @@ export class PiAgentRuntime implements AgentRuntime {
         event.type === "message_update" &&
         event.assistantMessageEvent.type === "text_delta"
       ) {
+        emittedText = true;
         emit({
           type: "text_delta",
           text: event.assistantMessageEvent.delta,
         });
+      }
+
+      if (
+        event.type === "message_update" &&
+        event.assistantMessageEvent.type === "error"
+      ) {
+        modelError = event.assistantMessageEvent.error.errorMessage;
+      }
+
+      if (
+        event.type === "message_end" &&
+        event.message.role === "assistant" &&
+        !emittedText
+      ) {
+        const text = event.message.content
+          .filter((content) => content.type === "text")
+          .map((content) => content.text)
+          .join("");
+        if (text) emit({ type: "text_delta", text });
+        modelError ??= event.message.errorMessage;
       }
 
       if (event.type === "tool_execution_start") {
@@ -114,6 +137,9 @@ export class PiAgentRuntime implements AgentRuntime {
         source: "rpc",
       });
       await eventPipeline;
+      if (modelError) {
+        throw new Error(`Ark model request failed: ${modelError}`);
+      }
     } finally {
       unsubscribe();
       session.dispose();
@@ -136,7 +162,7 @@ function projectResourceLoader(workdir: string): ResourceLoader {
 
 Your only working directory is ${workdir}. Use the provided read, write, edit, and bash tools to inspect and change the real Daytona sandbox.
 
-Build a complete, runnable website from the user's request. If the directory is empty, initialize the smallest appropriate TypeScript web project before implementing it. Keep the development server on port 3000 and bind it to 0.0.0.0. Verify your work with the project's own checks. Do not claim a change was made unless the corresponding tool completed successfully. Keep the final response concise and describe only real results.`,
+Build a complete, runnable website from the user's request. If the directory is empty, initialize the smallest appropriate TypeScript web project with npm before implementing it. Configure the dev script so that \`npm run dev\` binds to 0.0.0.0 on port 3000 without extra arguments. Verify your work with the project's own checks. Do not claim a change was made unless the corresponding tool completed successfully. Keep the final response concise and describe only real results.`,
     getSystemPromptSource: () => undefined,
     getAppendSystemPrompt: () => [],
     getAppendSystemPromptSources: () => [],

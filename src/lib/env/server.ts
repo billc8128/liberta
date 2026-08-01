@@ -23,7 +23,7 @@ const arkSchema = z.object({
     .string()
     .url()
     .default("https://ark.cn-beijing.volces.com/api/plan/v3"),
-  ARK_MODEL_ID: z.string().min(1).default("kimi-k3-260701"),
+  ARK_MODEL_ID: z.string().min(1).default("kimi-k3"),
 });
 
 export function databaseEnv() {
