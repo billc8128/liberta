@@ -3,6 +3,7 @@ import "server-only";
 import { Daytona, SandboxState } from "@daytona/sdk";
 
 import { daytonaEnv } from "@/lib/env/server";
+import { previewCommand } from "@/server/sandbox/preview-command";
 import {
   DEFAULT_PREVIEW_PORT,
   PROJECT_DIRECTORY,
@@ -99,7 +100,7 @@ export class DaytonaSandboxRuntime implements SandboxRuntime {
     }
 
     const command = await sandbox.process.executeSessionCommand(PREVIEW_SESSION, {
-      command: `cd ${shellQuote(workdir)} && ${previewCommand()}`,
+      command: `cd ${shellQuote(workdir)} && ${previewCommand(DEFAULT_PREVIEW_PORT)}`,
       runAsync: true,
     });
 
@@ -131,18 +132,6 @@ export class DaytonaSandboxRuntime implements SandboxRuntime {
 
 function shellQuote(value: string) {
   return `'${value.replaceAll("'", `'"'"'`)}'`;
-}
-
-function previewCommand() {
-  return [
-    "if [ -x node_modules/.bin/next ]; then",
-    `exec node_modules/.bin/next dev --hostname 0.0.0.0 --port ${DEFAULT_PREVIEW_PORT};`,
-    "elif [ -x node_modules/.bin/vite ]; then",
-    `exec node_modules/.bin/vite --host 0.0.0.0 --port ${DEFAULT_PREVIEW_PORT};`,
-    "else",
-    `exec npm run dev -- --host 0.0.0.0 --port ${DEFAULT_PREVIEW_PORT};`,
-    "fi",
-  ].join(" ");
 }
 
 async function previewResponds(sandbox: Awaited<ReturnType<Daytona["get"]>>) {
