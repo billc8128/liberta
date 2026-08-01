@@ -11,6 +11,7 @@ import {
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
+import { submitOnEnter } from "@/components/submit-on-enter";
 import type { ProjectStateDto } from "@/lib/projects/types";
 
 interface ProjectWorkspaceProps {
@@ -23,6 +24,7 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
   const [previewUrl, setPreviewUrl] = useState<string>();
   const [previewVersion, setPreviewVersion] = useState(0);
   const [sending, setSending] = useState(false);
+  const [chatPrompt, setChatPrompt] = useState("");
   const [messageError, setMessageError] = useState<string>();
   const chatEnd = useRef<HTMLDivElement>(null);
 
@@ -64,7 +66,7 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
     const form = event.currentTarget;
     const data = new FormData(form);
     const prompt = String(data.get("prompt") ?? "").trim();
-    if (prompt.length < 10 || sending) return;
+    if (!prompt || sending) return;
 
     setSending(true);
     setMessageError(undefined);
@@ -84,7 +86,7 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
       return;
     }
 
-    form.reset();
+    setChatPrompt("");
     setPreviewUrl(undefined);
     await refreshState();
     setSending(false);
@@ -133,8 +135,15 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
             rows={2}
             placeholder="Tell the agent what to change…"
             disabled={agentActive || sending}
+            value={chatPrompt}
+            onChange={(event) => setChatPrompt(event.target.value)}
+            onKeyDown={submitOnEnter}
           />
-          <button type="submit" aria-label="Send message" disabled={agentActive || sending}>
+          <button
+            type="submit"
+            aria-label="Send message"
+            disabled={agentActive || sending || !chatPrompt.trim()}
+          >
             <ArrowUp size={18} />
           </button>
           {messageError && <p role="alert">{messageError}</p>}

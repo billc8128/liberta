@@ -13,6 +13,7 @@ const authSchema = databaseSchema.extend({
 
 const queueSchema = z.object({
   REDIS_URL: z.string().url(),
+  REDIS_KEY_PREFIX: z.string().min(1),
 });
 
 const daytonaSchema = z.object({

@@ -4,6 +4,8 @@ import { ArrowUp } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
+import { submitOnEnter } from "@/components/submit-on-enter";
+
 interface HomeComposerProps {
   runtimeReady: boolean;
   signedIn: boolean;
@@ -57,10 +59,11 @@ export function HomeComposer({ runtimeReady, signedIn }: HomeComposerProps) {
           autoComplete="off"
           value={prompt}
           onChange={(event) => setPrompt(event.target.value)}
+          onKeyDown={submitOnEnter}
         />
         <div className="composer-footer">
           <span className="composer-hint">
-            Start with the purpose. The agent will ask for what it needs.
+            Enter to send · Shift+Enter for a new line
           </span>
           <button
             type="submit"

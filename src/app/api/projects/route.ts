@@ -25,7 +25,8 @@ export async function POST(request: Request) {
         "QUEUE_UNAVAILABLE",
         error instanceof Error ? error.message : "Agent queue is unavailable.",
       );
-      throw error;
+      console.error("Project queue unavailable", error);
+      return Response.json({ error: "QUEUE_UNAVAILABLE" }, { status: 503 });
     }
 
     return Response.json({ projectId: project.id, runId: run.id }, { status: 202 });

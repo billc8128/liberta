@@ -6,9 +6,11 @@ import IORedis from "ioredis";
 import { queueEnv } from "@/lib/env/server";
 import { executeAgentRun } from "@/server/agent/execute-run";
 import { AGENT_RUN_QUEUE, type AgentRunJob } from "@/server/queue/agent-runs";
+import { bullmqPrefix } from "@/server/queue/prefix";
 
 export function createAgentRunWorker() {
-  const connection = new IORedis(queueEnv().REDIS_URL, {
+  const env = queueEnv();
+  const connection = new IORedis(env.REDIS_URL, {
     maxRetriesPerRequest: null,
     enableReadyCheck: true,
   });
@@ -18,6 +20,7 @@ export function createAgentRunWorker() {
     {
       connection,
       concurrency: 2,
+      prefix: bullmqPrefix(env.REDIS_KEY_PREFIX),
     },
   );
 

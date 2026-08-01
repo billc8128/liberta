@@ -36,7 +36,8 @@ export async function POST(request: Request, context: ProjectRouteContext) {
         "QUEUE_UNAVAILABLE",
         error instanceof Error ? error.message : "Agent queue is unavailable.",
       );
-      throw error;
+      console.error("Project message queue unavailable", error);
+      return Response.json({ error: "QUEUE_UNAVAILABLE" }, { status: 503 });
     }
 
     return Response.json({ runId: run.id }, { status: 202 });
