@@ -98,8 +98,8 @@ export class DaytonaSandboxRuntime implements SandboxRuntime {
       await sandbox.process.createSession(PREVIEW_SESSION);
     }
 
-    await sandbox.process.executeSessionCommand(PREVIEW_SESSION, {
-      command: `cd ${shellQuote(workdir)} && npm run dev`,
+    const command = await sandbox.process.executeSessionCommand(PREVIEW_SESSION, {
+      command: `cd ${shellQuote(workdir)} && ${previewCommand()}`,
       runAsync: true,
     });
 
@@ -110,7 +110,16 @@ export class DaytonaSandboxRuntime implements SandboxRuntime {
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
 
-    throw new Error("The generated site did not become ready on port 3000.");
+    const logs = await sandbox.process.getSessionCommandLogs(
+      PREVIEW_SESSION,
+      command.cmdId,
+    );
+    const detail = (logs.stderr || logs.stdout || logs.output || "").trim();
+    throw new Error(
+      detail
+        ? `The generated site failed to start: ${detail.slice(-1_000)}`
+        : "The generated site did not become ready on port 3000.",
+    );
   }
 
   async previewUrl(sandboxId: string, port = DEFAULT_PREVIEW_PORT) {
@@ -122,6 +131,18 @@ export class DaytonaSandboxRuntime implements SandboxRuntime {
 
 function shellQuote(value: string) {
   return `'${value.replaceAll("'", `'"'"'`)}'`;
+}
+
+function previewCommand() {
+  return [
+    "if [ -x node_modules/.bin/next ]; then",
+    `exec node_modules/.bin/next dev --hostname 0.0.0.0 --port ${DEFAULT_PREVIEW_PORT};`,
+    "elif [ -x node_modules/.bin/vite ]; then",
+    `exec node_modules/.bin/vite --host 0.0.0.0 --port ${DEFAULT_PREVIEW_PORT};`,
+    "else",
+    `exec npm run dev -- --host 0.0.0.0 --port ${DEFAULT_PREVIEW_PORT};`,
+    "fi",
+  ].join(" ");
 }
 
 async function previewResponds(sandbox: Awaited<ReturnType<Daytona["get"]>>) {
