@@ -95,9 +95,11 @@ export class DaytonaSandboxRuntime implements SandboxRuntime {
 
     try {
       await sandbox.process.getSession(PREVIEW_SESSION);
+      await sandbox.process.deleteSession(PREVIEW_SESSION);
     } catch {
-      await sandbox.process.createSession(PREVIEW_SESSION);
+      // There is no previous preview process to replace.
     }
+    await sandbox.process.createSession(PREVIEW_SESSION);
 
     const command = await sandbox.process.executeSessionCommand(PREVIEW_SESSION, {
       command: `cd ${shellQuote(workdir)} && ${previewCommand(DEFAULT_PREVIEW_PORT)}`,
