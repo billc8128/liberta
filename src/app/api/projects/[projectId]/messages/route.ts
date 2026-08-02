@@ -20,13 +20,30 @@ export async function POST(request: Request, context: ProjectRouteContext) {
   try {
     const { projectId } = await context.params;
     const body = (await request.json()) as { prompt?: unknown };
-    const { run } = await addProjectMessage({
+    const { message, run } = await addProjectMessage({
       ownerId: session.user.id,
       projectId,
       prompt: typeof body.prompt === "string" ? body.prompt : "",
     });
 
-    return Response.json({ runId: run.id }, { status: 202 });
+    return Response.json(
+      {
+        message: {
+          id: message.id,
+          role: message.role,
+          status: message.status,
+          content: message.content,
+          createdAt: message.createdAt.toISOString(),
+        },
+        run: {
+          id: run.id,
+          status: run.status,
+          errorMessage: run.errorMessage,
+          createdAt: run.createdAt.toISOString(),
+        },
+      },
+      { status: 202 },
+    );
   } catch (error) {
     if (error instanceof ZodError) {
       return Response.json({ error: "INVALID_PROMPT" }, { status: 400 });

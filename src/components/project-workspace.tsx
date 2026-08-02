@@ -95,31 +95,77 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
     const prompt = String(data.get("prompt") ?? "").trim();
     if (!prompt || sending) return;
 
+    const optimisticId = `pending-${crypto.randomUUID()}`;
+    const optimisticMessage: ProjectStateDto["messages"][number] = {
+      id: optimisticId,
+      role: "user",
+      status: "completed",
+      content: prompt,
+      createdAt: new Date().toISOString(),
+    };
+
     setSending(true);
     setMessageError(undefined);
-    const response = await fetch(`/api/projects/${state.project.id}/messages`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ prompt }),
-    });
-    if (!response.ok) {
-      const result = (await response.json()) as { error?: string };
-      setMessageError(
-        result.error === "PROJECT_BUSY"
-          ? "The agent is still working on the previous message."
-          : "This message could not be sent.",
-      );
+    setChatPrompt("");
+    setState((current) => ({
+      ...current,
+      messages: [...current.messages, optimisticMessage],
+    }));
+
+    try {
+      const response = await fetch(`/api/projects/${state.project.id}/messages`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+      if (!response.ok) {
+        const result = (await response.json()) as { error?: string };
+        setState((current) => ({
+          ...current,
+          messages: current.messages.filter((message) => message.id !== optimisticId),
+        }));
+        setChatPrompt(prompt);
+        setMessageError(
+          result.error === "PROJECT_BUSY"
+            ? "The agent is still working on the previous message."
+            : "This message could not be sent.",
+        );
+        return;
+      }
+
+      const result = (await response.json()) as {
+        message: ProjectStateDto["messages"][number];
+        run: NonNullable<ProjectStateDto["run"]>;
+      };
+      setState((current) => {
+        const messages = current.messages.filter(
+          (message) => message.id !== optimisticId,
+        );
+        return {
+          ...current,
+          messages: messages.some((message) => message.id === result.message.id)
+            ? messages
+            : [...messages, result.message],
+          run: current.run?.id === result.run.id ? current.run : result.run,
+        };
+      });
+      setPreviewUrl(undefined);
+    } catch {
+      setState((current) => ({
+        ...current,
+        messages: current.messages.filter((message) => message.id !== optimisticId),
+      }));
+      setChatPrompt(prompt);
+      setMessageError("This message could not be sent.");
+    } finally {
       setSending(false);
-      return;
     }
 
-    setChatPrompt("");
-    setPreviewUrl(undefined);
-    setSending(false);
   }
 
   const activity = currentActivity(state);
-  const agentActive = state.run?.status === "queued" || state.run?.status === "running";
+  const runActive = state.run?.status === "queued" || state.run?.status === "running";
+  const agentActive = sending || runActive;
 
   return (
     <main className="workspace-shell">
@@ -143,7 +189,7 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
           {agentActive && (
             <div className="agent-activity">
               <span aria-hidden="true" />
-              {activity}
+              {sending && !runActive ? "Sending…" : activity}
             </div>
           )}
           {state.run?.status === "failed" && (

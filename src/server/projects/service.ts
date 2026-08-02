@@ -61,47 +61,38 @@ export async function addProjectMessage(input: {
   const db = database();
 
   const result = await db.transaction(async (transaction) => {
-    const [project] = await transaction
-      .select()
+    const [record] = await transaction
+      .select({ project: projects, activeRunId: agentRuns.id })
       .from(projects)
-      .where(and(eq(projects.id, input.projectId), eq(projects.ownerId, input.ownerId)))
-      .limit(1);
-    if (!project) {
-      throw new ProjectAccessError();
-    }
-
-    const [activeRun] = await transaction
-      .select({ id: agentRuns.id })
-      .from(agentRuns)
-      .where(
+      .leftJoin(
+        agentRuns,
         and(
-          eq(agentRuns.projectId, input.projectId),
+          eq(agentRuns.projectId, projects.id),
           inArray(agentRuns.status, ["queued", "running"]),
         ),
       )
+      .where(and(eq(projects.id, input.projectId), eq(projects.ownerId, input.ownerId)))
       .limit(1);
-    if (activeRun) {
+    if (!record) {
+      throw new ProjectAccessError();
+    }
+    if (record.activeRunId) {
       throw new ProjectBusyError();
     }
 
     const [message] = await transaction
       .insert(messages)
-      .values({ projectId: project.id, role: "user", content: prompt })
+      .values({ projectId: record.project.id, role: "user", content: prompt })
       .returning();
     const [run] = await transaction
       .insert(agentRuns)
       .values({
-        projectId: project.id,
+        projectId: record.project.id,
         promptMessageId: message.id,
         modelProvider: "volcengine-agent-plan",
         modelId: model.ARK_MODEL_ID,
       })
       .returning();
-
-    await transaction
-      .update(projects)
-      .set({ status: "ready", updatedAt: new Date() })
-      .where(eq(projects.id, project.id));
 
     return { message, run };
   });
