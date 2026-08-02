@@ -3,6 +3,8 @@ import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { connection } from "next/server";
 
 import { HomeComposer } from "@/components/home-composer";
+import { AnimatedGradient } from "@/components/ui/animated-gradient";
+import { WorkspaceLoopDemo } from "@/components/workspace-loop-demo";
 import { currentSession } from "@/lib/auth/session";
 import { runtimeReadiness } from "@/lib/env/server";
 
@@ -58,50 +60,50 @@ export default async function Home() {
         </Link>
       </header>
 
-      <section className="hero" aria-labelledby="home-title">
+      <section className="hero aurora-hero" aria-labelledby="home-title">
+        <AnimatedGradient
+          className="aurora-field"
+          config={{
+            preset: "custom",
+            color1: "#07020f",
+            color2: "#30105c",
+            color3: "#ff1f8f",
+            rotation: -28,
+            proportion: 63,
+            scale: 0.72,
+            speed: 10,
+            distortion: 26,
+            swirl: 58,
+            swirlIterations: 8,
+            softness: 96,
+            offset: 180,
+            shape: "Edge",
+            shapeSize: 56,
+          }}
+          noise={{ opacity: 0.2, scale: 0.8 }}
+        />
+        <div className="aurora-shade" aria-hidden="true" />
+
         <div className="hero-kicker">
-          <span>AI site maker</span>
-          <span>Design / Code / Run</span>
+          <span>One project / one agent</span>
+          <span>Design · Code · Run · Deploy</span>
         </div>
 
-        <div className="hero-title-wrap">
-          <h1 className="display-title" id="home-title">
-            <span className="title-solid">Make ideas</span>
-            <span className="title-outline">operational.</span>
+        <div className="aurora-content">
+          <p className="aurora-overline">AI site maker</p>
+          <h1 className="aurora-title" id="home-title">
+            Make your idea
+            <span>operational.</span>
           </h1>
-
-          <div className="signal-visual" aria-hidden="true">
-            <span className="signal-plane" />
-            <span className="signal-beam" />
-            <span className="signal-axis" />
-            <div className="particle-field">
-              {Array.from({ length: 18 }, (_, index) => (
-                <span key={index} />
-              ))}
-            </div>
-            <div className="machine-lens">
-              <span className="lens-ring lens-ring-outer" />
-              <span className="lens-ring lens-ring-inner" />
-              <span className="lens-aperture" />
-              <span className="lens-slit" />
-            </div>
-            <span className="signal-caption">Live output / 01</span>
-          </div>
+          <p className="aurora-copy">
+            Describe the site. One coding agent designs it, builds it, runs it,
+            and keeps improving the real project with you.
+          </p>
         </div>
 
-        <div className="hero-bottom">
-          <div className="hero-copy">
-            <p>
-              One coding agent turns a conversation into a designed, running,
-              deployable website. Keep talking; the same project keeps moving.
-            </p>
-            <span className="bracket-note">{"{ one project / one continuous agent }"}</span>
-          </div>
-
-          <div className="hero-composer" id="start">
-            <p className="composer-label">What do you want to make?</p>
-            <HomeComposer runtimeReady={runtimeReady} signedIn={Boolean(session)} />
-          </div>
+        <div className="aurora-composer" id="start">
+          <span className="aurora-composer-label">Start with one sentence</span>
+          <HomeComposer runtimeReady={runtimeReady} signedIn={Boolean(session)} />
         </div>
 
         <a className="scroll-cue" href="#system">
@@ -129,19 +131,7 @@ export default async function Home() {
           </p>
         </div>
 
-        <div className="agent-orbit" aria-label="Project workflow">
-          <div className="agent-core">
-            <span>Project L</span>
-            <strong>AGENT</strong>
-            <small>Continuous session</small>
-          </div>
-          <ol>
-            <li><span>01</span>Understand</li>
-            <li><span>02</span>Design</li>
-            <li><span>03</span>Build</li>
-            <li><span>04</span>Run</li>
-          </ol>
-        </div>
+        <WorkspaceLoopDemo />
       </section>
 
       <section className="capability-section" id="capabilities" aria-labelledby="capability-title">
