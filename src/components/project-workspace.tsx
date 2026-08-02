@@ -12,6 +12,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { submitOnEnter } from "@/components/submit-on-enter";
+import { MarketingThemeSwitch } from "@/components/marketing-theme";
 import type { ProjectStateDto } from "@/lib/projects/types";
 
 interface ProjectWorkspaceProps {
@@ -125,10 +126,11 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
       <aside className="conversation-panel">
         <header className="workspace-project-header">
           <Link href="/" aria-label="Back to projects"><ArrowLeft size={18} /></Link>
-          <div>
+          <div className="workspace-project-meta">
             <strong>{state.project.name}</strong>
             <span>{agentActive ? "Agent working" : "Project agent"}</span>
           </div>
+          <MarketingThemeSwitch />
         </header>
 
         <div className="conversation-scroll" aria-live="polite">

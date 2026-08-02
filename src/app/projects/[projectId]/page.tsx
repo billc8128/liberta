@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 
 import { ProjectWorkspace } from "@/components/project-workspace";
+import { MarketingThemeProvider } from "@/components/marketing-theme";
 import { currentSession } from "@/lib/auth/session";
 import { toProjectStateDto } from "@/server/projects/dto";
 import {
@@ -26,5 +27,9 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
     throw error;
   }
 
-  return <ProjectWorkspace initialState={initialState} />;
+  return (
+    <MarketingThemeProvider>
+      <ProjectWorkspace initialState={initialState} />
+    </MarketingThemeProvider>
+  );
 }
