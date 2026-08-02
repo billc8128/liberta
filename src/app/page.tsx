@@ -3,7 +3,11 @@ import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { connection } from "next/server";
 
 import { HomeComposer } from "@/components/home-composer";
-import { AnimatedGradient } from "@/components/ui/animated-gradient";
+import {
+  MarketingHeroVisual,
+  MarketingThemeProvider,
+  MarketingThemeSwitch,
+} from "@/components/marketing-theme";
 import { WorkspaceLoopDemo } from "@/components/workspace-loop-demo";
 import { currentSession } from "@/lib/auth/session";
 import { runtimeReadiness } from "@/lib/env/server";
@@ -42,6 +46,7 @@ export default async function Home() {
   const session = runtimeReady ? await currentSession() : null;
 
   return (
+    <MarketingThemeProvider>
     <main className="marketing-home">
       <header className="home-header">
         <Link className="brand-mark" href="/" aria-label="Project L home">
@@ -54,34 +59,17 @@ export default async function Home() {
           <a href="#capabilities">Capabilities</a>
         </nav>
 
-        <Link className="header-action" href={session ? "#start" : "/login"}>
-          {session ? "New project" : "Sign in"}
-          <ArrowUpRight size={15} aria-hidden="true" />
-        </Link>
+        <div className="header-actions">
+          <MarketingThemeSwitch />
+          <Link className="header-action" href={session ? "#start" : "/login"}>
+            {session ? "New project" : "Sign in"}
+            <ArrowUpRight size={15} aria-hidden="true" />
+          </Link>
+        </div>
       </header>
 
       <section className="hero aurora-hero" aria-labelledby="home-title">
-        <AnimatedGradient
-          className="aurora-field"
-          config={{
-            preset: "custom",
-            color1: "#07020f",
-            color2: "#30105c",
-            color3: "#ff1f8f",
-            rotation: -28,
-            proportion: 63,
-            scale: 0.72,
-            speed: 10,
-            distortion: 26,
-            swirl: 58,
-            swirlIterations: 8,
-            softness: 96,
-            offset: 180,
-            shape: "Edge",
-            shapeSize: 56,
-          }}
-          noise={{ opacity: 0.2, scale: 0.8 }}
-        />
+        <MarketingHeroVisual />
         <div className="aurora-shade" aria-hidden="true" />
 
         <div className="hero-kicker">
@@ -91,13 +79,22 @@ export default async function Home() {
 
         <div className="aurora-content">
           <p className="aurora-overline">AI site maker</p>
-          <h1 className="aurora-title" id="home-title">
-            Make your idea
-            <span>operational.</span>
+          <h1 className="hero-theme-title" id="home-title">
+            <span className="aurora-title machine-title">
+              Make your idea
+              <span>operational.</span>
+            </span>
+            <span className="portrait-title">
+              Make something<br />people <em>remember.</em>
+            </span>
           </h1>
-          <p className="aurora-copy">
+          <p className="aurora-copy machine-copy">
             Describe the site. One coding agent designs it, builds it, runs it,
             and keeps improving the real project with you.
+          </p>
+          <p className="portrait-copy">
+            Start with an idea. Your agent turns it into a site that feels
+            considered, personal, and ready to share.
           </p>
         </div>
 
@@ -190,5 +187,6 @@ export default async function Home() {
         <span>© 2026</span>
       </footer>
     </main>
+    </MarketingThemeProvider>
   );
 }
