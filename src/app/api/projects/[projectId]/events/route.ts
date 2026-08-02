@@ -5,7 +5,10 @@ import {
   getProjectState,
   ProjectAccessError,
 } from "@/server/projects/service";
-import { subscribeToProjectUpdates } from "@/server/projects/updates";
+import {
+  subscribeToProjectUpdates,
+  type ProjectUpdate,
+} from "@/server/projects/updates";
 
 interface ProjectRouteContext {
   params: Promise<{ projectId: string }>;
@@ -58,12 +61,29 @@ export async function GET(request: Request, context: ProjectRouteContext) {
           );
         };
 
-        const queueState = () => {
-          pipeline = pipeline.then(sendState).catch(() => close());
+        const sendUpdate = async (update: ProjectUpdate) => {
+          if (update.type === "state") {
+            await sendState();
+            return;
+          }
+          if (closed) return;
+          const data =
+            update.type === "message_delta"
+              ? { messageId: update.messageId, delta: update.delta }
+              : { messageId: update.messageId, content: update.content };
+          controller.enqueue(
+            encoder.encode(
+              `event: ${update.type}\ndata: ${JSON.stringify(data)}\n\n`,
+            ),
+          );
+        };
+
+        const queueUpdate = (update: ProjectUpdate) => {
+          pipeline = pipeline.then(() => sendUpdate(update)).catch(() => close());
         };
 
         try {
-          unsubscribe = await subscribeToProjectUpdates(projectId, queueState);
+          unsubscribe = await subscribeToProjectUpdates(projectId, queueUpdate);
         } catch (error) {
           close();
           throw error;

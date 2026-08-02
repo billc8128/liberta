@@ -43,7 +43,37 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
     const updateState = (event: MessageEvent<string>) => {
       setState(JSON.parse(event.data) as ProjectStateDto);
     };
+    const appendMessage = (event: MessageEvent<string>) => {
+      const update = JSON.parse(event.data) as {
+        messageId: string;
+        delta: string;
+      };
+      setState((current) => ({
+        ...current,
+        messages: current.messages.map((message) =>
+          message.id === update.messageId
+            ? { ...message, content: message.content + update.delta }
+            : message,
+        ),
+      }));
+    };
+    const replaceMessage = (event: MessageEvent<string>) => {
+      const update = JSON.parse(event.data) as {
+        messageId: string;
+        content: string;
+      };
+      setState((current) => ({
+        ...current,
+        messages: current.messages.map((message) =>
+          message.id === update.messageId
+            ? { ...message, content: update.content }
+            : message,
+        ),
+      }));
+    };
     events.addEventListener("state", updateState as EventListener);
+    events.addEventListener("message_delta", appendMessage as EventListener);
+    events.addEventListener("message_replace", replaceMessage as EventListener);
     return () => events.close();
   }, [state.project.id]);
 
@@ -55,7 +85,7 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
 
   useEffect(() => {
     chatEnd.current?.scrollIntoView({ behavior: "smooth" });
-  }, [state.messages.length, state.events.length]);
+  }, [state.messages, state.events.length]);
 
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

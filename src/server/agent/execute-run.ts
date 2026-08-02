@@ -17,7 +17,11 @@ import {
 } from "@/server/db/schema";
 import { failAgentRun } from "@/server/projects/service";
 import { promptWithConversation } from "@/server/projects/prompt";
-import { publishProjectUpdate } from "@/server/projects/updates";
+import {
+  publishProjectMessageDelta,
+  publishProjectMessageReplacement,
+  publishProjectUpdate,
+} from "@/server/projects/updates";
 import { DaytonaSandboxRuntime } from "@/server/sandbox/daytona";
 import { runnableWebsiteCheckCommand } from "@/server/sandbox/preview-command";
 
@@ -91,7 +95,9 @@ export async function executeAgentRun(runId: string) {
     const agent = new PiAgentRuntime(sandboxes);
     let sequence = 0;
     let usedTool = false;
-    let lastStreamPersistedAt = 0;
+    let pendingDelta = "";
+    let flushTimer: ReturnType<typeof setTimeout> | undefined;
+    let flushPipeline = Promise.resolve();
 
     const [assistantMessage] = await db
       .insert(messages)
@@ -109,20 +115,58 @@ export async function executeAgentRun(runId: string) {
       .where(eq(agentRuns.id, runId));
     await publishProjectUpdate(project.id);
 
+    const flushDelta = async () => {
+      const delta = pendingDelta;
+      pendingDelta = "";
+      if (!delta) return;
+      await Promise.all([
+        db
+          .update(messages)
+          .set({ content: response })
+          .where(eq(messages.id, assistantMessage.id)),
+        publishProjectMessageDelta(project.id, assistantMessage.id, delta),
+      ]);
+    };
+
+    const scheduleFlush = () => {
+      if (flushTimer) return;
+      flushTimer = setTimeout(() => {
+        flushTimer = undefined;
+        flushPipeline = flushPipeline.then(flushDelta);
+      }, 50);
+    };
+
+    const finishFlush = async () => {
+      if (flushTimer) {
+        clearTimeout(flushTimer);
+        flushTimer = undefined;
+      }
+      await flushPipeline;
+      await flushDelta();
+    };
+
     const recordEvent = async (event: AgentRuntimeEvent) => {
       if (event.type === "text_delta") {
         response += event.text;
-        const now = Date.now();
-        if (now - lastStreamPersistedAt >= 250) {
-          lastStreamPersistedAt = now;
-          await db
-            .update(messages)
-            .set({ content: response })
-            .where(eq(messages.id, assistantMessage.id));
-          await publishProjectUpdate(project.id);
-        }
+        pendingDelta += event.text;
+        scheduleFlush();
         return;
       }
+      if (event.type === "text_retract") {
+        await finishFlush();
+        response = response.slice(0, -event.characters);
+        await db
+          .update(messages)
+          .set({ content: response })
+          .where(eq(messages.id, assistantMessage.id));
+        await publishProjectMessageReplacement(
+          project.id,
+          assistantMessage.id,
+          response,
+        );
+        return;
+      }
+      await finishFlush();
       usedTool = true;
       sequence += 1;
       await db.insert(agentRunEvents).values({
@@ -145,6 +189,7 @@ export async function executeAgentRun(runId: string) {
       },
       recordEvent,
     );
+    await finishFlush();
     const projectCheck = await sandboxes.execute(
       project.sandboxId!,
       runnableWebsiteCheckCommand(),

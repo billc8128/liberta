@@ -63,7 +63,8 @@ export class PiAgentRuntime implements AgentRuntime {
     let session: Awaited<ReturnType<typeof createAgentSession>>["session"] | undefined;
 
     let eventPipeline = Promise.resolve();
-    let emittedText = false;
+    let assistantTextLength = 0;
+    let assistantEmittedText = false;
     let modelError: string | undefined;
     const emit = (event: AgentRuntimeEvent) => {
       eventPipeline = eventPipeline.then(() => onEvent(event));
@@ -88,11 +89,17 @@ export class PiAgentRuntime implements AgentRuntime {
       }));
 
       unsubscribe = session.subscribe((event) => {
+        if (event.type === "message_start" && event.message.role === "assistant") {
+          assistantTextLength = 0;
+          assistantEmittedText = false;
+        }
+
         if (
           event.type === "message_update" &&
           event.assistantMessageEvent.type === "text_delta"
         ) {
-          emittedText = true;
+          assistantEmittedText = true;
+          assistantTextLength += event.assistantMessageEvent.delta.length;
           emit({
             type: "text_delta",
             text: event.assistantMessageEvent.delta,
@@ -109,17 +116,26 @@ export class PiAgentRuntime implements AgentRuntime {
         if (
           event.type === "message_end" &&
           event.message.role === "assistant" &&
-          !emittedText
+          !assistantEmittedText
         ) {
           const text = event.message.content
             .filter((content) => content.type === "text")
             .map((content) => content.text)
             .join("");
-          if (text) emit({ type: "text_delta", text });
+          if (text) {
+            assistantTextLength += text.length;
+            emit({ type: "text_delta", text });
+          }
           modelError ??= event.message.errorMessage;
         }
 
         if (event.type === "tool_execution_start") {
+          // Pi may produce prose before a tool call. That prose is internal work
+          // narration, not the agent's user-facing answer.
+          if (assistantTextLength > 0) {
+            emit({ type: "text_retract", characters: assistantTextLength });
+            assistantTextLength = 0;
+          }
           emit({
             type: "tool_started",
             toolCallId: event.toolCallId,
@@ -165,13 +181,15 @@ function projectResourceLoader(workdir: string): ResourceLoader {
     getPrompts: () => ({ prompts: [], diagnostics: [] }),
     getThemes: () => ({ themes: [], diagnostics: [] }),
     getAgentsFiles: () => ({ agentsFiles: [] }),
-    getSystemPrompt: () => `You are the coding agent for one Project L website.
+    getSystemPrompt: () => `You are the single coding agent for one Project L website.
 
 Your only working directory is ${workdir}. Use the provided read, write, edit, and bash tools to inspect and change the real Daytona sandbox.
 
-Follow the latest user message and respond naturally. Use tools only when the request requires inspecting or changing the website. Ask a concise question when you need missing information instead of inventing requirements.
+Treat tools as actions, not as a default response. A user message authorizes tool use only when it contains a concrete request to inspect, create, run, debug, or change the website. Conversation, greetings, acknowledgements, broad ideas, and underspecified requests do not authorize tool use. In those cases, reply briefly or ask one concise question. An empty workspace is never permission to initialize a project by itself.
 
-For an actionable request, build a complete, runnable website. If the directory is empty, initialize the smallest appropriate TypeScript web project with npm before implementing it. Keep the framework's standard dev script; the preview runtime supplies the host and port. Do not start a development or preview server yourself—Project L starts it after your turn. Verify with a production build or another bounded command. Do not claim a change was made unless the corresponding tool completed successfully. Keep the final response concise and describe only real results.`,
+For an actionable request, build a complete, runnable website. If the directory is empty, initialize the smallest appropriate TypeScript web project with npm before implementing it. Keep the framework's standard dev script; the preview runtime supplies the host and port. Do not start a development or preview server yourself—Project L starts it after your turn. Verify with a production build or another bounded command. Do not claim a change was made unless the corresponding tool completed successfully. Keep the final response concise and describe only real results.
+
+Never narrate upcoming or completed tool calls in assistant prose. Call tools directly and silently. After tool work, give only the result and any decision the user must make, in at most three short sentences. Do not list routine operations such as reading files, installing dependencies, or running the build.`,
     getSystemPromptSource: () => undefined,
     getAppendSystemPrompt: () => [],
     getAppendSystemPromptSources: () => [],
