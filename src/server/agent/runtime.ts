@@ -1,3 +1,5 @@
+import type { ProjectSandbox } from "@/server/sandbox/runtime";
+
 export type AgentRuntimeEvent =
   | { type: "text_delta"; text: string }
   | { type: "text_retract"; characters: number }
@@ -10,10 +12,10 @@ export type AgentRuntimeEvent =
     };
 
 export interface AgentTurnInput {
-  sandboxId: string;
   workdir: string;
   prompt: string;
   sessionData?: string;
+  resolveSandbox: () => Promise<ProjectSandbox>;
 }
 
 export interface AgentTurnResult {

@@ -1,5 +1,7 @@
 import "server-only";
 
+import path from "node:path";
+
 import type { Sandbox } from "@daytona/sdk";
 import {
   createBashToolDefinition,
@@ -13,15 +15,39 @@ import {
   type WriteOperations,
 } from "@earendil-works/pi-coding-agent";
 
+import type {
+  ProjectSandbox,
+  SandboxRuntime,
+} from "@/server/sandbox/runtime";
+
 const DEFAULT_COMMAND_TIMEOUT_SECONDS = 120;
 const MAX_COMMAND_TIMEOUT_SECONDS = 300;
 
 export function createDaytonaTools(
-  sandbox: Sandbox,
+  sandboxes: SandboxRuntime,
   workdir: string,
+  resolveSandbox: () => Promise<ProjectSandbox>,
 ): ToolDefinition[] {
-  const read = readOperations(sandbox);
-  const write = writeOperations(sandbox);
+  let workspacePromise:
+    | Promise<{ sandbox: Sandbox; actualWorkdir: string }>
+    | undefined;
+  const workspace = () => {
+    workspacePromise ??= resolveSandbox().then(async (resolved) => ({
+      sandbox: await sandboxes.ensureRunning(resolved.id),
+      actualWorkdir: resolved.workdir,
+    }));
+    return workspacePromise;
+  };
+  const resolvePath = async (requestedPath: string) => {
+    const resolved = await workspace();
+    return {
+      sandbox: resolved.sandbox,
+      path: mapSandboxPath(requestedPath, workdir, resolved.actualWorkdir),
+    };
+  };
+
+  const read = readOperations(resolvePath);
+  const write = writeOperations(resolvePath);
 
   const edit: EditOperations = {
     readFile: read.readFile,
@@ -36,9 +62,10 @@ export function createDaytonaTools(
       }
 
       // Never forward the Project L worker environment into a user sandbox.
-      const result = await sandbox.process.executeCommand(
+      const resolved = await workspace();
+      const result = await resolved.sandbox.process.executeCommand(
         command,
-        cwd,
+        mapSandboxPath(cwd, workdir, resolved.actualWorkdir),
         undefined,
         Math.min(
           options.timeout ?? DEFAULT_COMMAND_TIMEOUT_SECONDS,
@@ -69,12 +96,20 @@ export function createDaytonaTools(
   return tools as unknown as ToolDefinition[];
 }
 
-function readOperations(sandbox: Sandbox): ReadOperations {
+function readOperations(
+  resolvePath: (
+    path: string,
+  ) => Promise<{ sandbox: Sandbox; path: string }>,
+): ReadOperations {
   return {
-    readFile: (path) => sandbox.fs.downloadFile(path),
+    readFile: async (path) => {
+      const resolved = await resolvePath(path);
+      return resolved.sandbox.fs.downloadFile(resolved.path);
+    },
     access: async (path) => {
-      const result = await sandbox.process.executeCommand(
-        `test -r ${shellQuote(path)}`,
+      const resolved = await resolvePath(path);
+      const result = await resolved.sandbox.process.executeCommand(
+        `test -r ${shellQuote(resolved.path)}`,
         undefined,
         undefined,
         10,
@@ -86,11 +121,34 @@ function readOperations(sandbox: Sandbox): ReadOperations {
   };
 }
 
-function writeOperations(sandbox: Sandbox): WriteOperations {
+function writeOperations(
+  resolvePath: (
+    path: string,
+  ) => Promise<{ sandbox: Sandbox; path: string }>,
+): WriteOperations {
   return {
-    writeFile: (path, content) => sandbox.fs.uploadFile(Buffer.from(content), path),
-    mkdir: (path) => sandbox.fs.createFolder(path, "755"),
+    writeFile: async (path, content) => {
+      const resolved = await resolvePath(path);
+      return resolved.sandbox.fs.uploadFile(Buffer.from(content), resolved.path);
+    },
+    mkdir: async (path) => {
+      const resolved = await resolvePath(path);
+      return resolved.sandbox.fs.createFolder(resolved.path, "755");
+    },
   };
+}
+
+function mapSandboxPath(
+  requestedPath: string,
+  exposedWorkdir: string,
+  actualWorkdir: string,
+) {
+  const absolutePath = path.posix.resolve(exposedWorkdir, requestedPath);
+  const relativePath = path.posix.relative(exposedWorkdir, absolutePath);
+  if (relativePath === ".." || relativePath.startsWith("../")) {
+    throw new Error("Path is outside the project workspace.");
+  }
+  return path.posix.join(actualWorkdir, relativePath);
 }
 
 function shellQuote(value: string) {

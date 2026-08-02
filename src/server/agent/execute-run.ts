@@ -25,6 +25,8 @@ import {
 import { DaytonaSandboxRuntime } from "@/server/sandbox/daytona";
 import { runnableWebsiteCheckCommand } from "@/server/sandbox/preview-command";
 
+const UNPROVISIONED_WORKDIR = "/workspace/project";
+
 export async function executeAgentRun(runId: string) {
   const db = database();
   const [claimedRun] = await db
@@ -78,23 +80,35 @@ export async function executeAgentRun(runId: string) {
 
     const sandboxes = new DaytonaSandboxRuntime();
     let project = record.project;
-    if (!project.sandboxId || !project.sandboxWorkdir) {
-      const sandbox = await sandboxes.create(project.id);
-      const [updated] = await db
-        .update(projects)
-        .set({
-          sandboxId: sandbox.id,
-          sandboxWorkdir: sandbox.workdir,
-          updatedAt: new Date(),
-        })
-        .where(eq(projects.id, project.id))
-        .returning();
-      project = updated;
-    }
+    let sandboxPromise:
+      | Promise<{ id: string; workdir: string }>
+      | undefined;
+    const resolveSandbox = () => {
+      if (project.sandboxId && project.sandboxWorkdir) {
+        return Promise.resolve({
+          id: project.sandboxId,
+          workdir: project.sandboxWorkdir,
+        });
+      }
+      sandboxPromise ??= (async () => {
+        const sandbox = await sandboxes.create(project.id);
+        const [updated] = await db
+          .update(projects)
+          .set({
+            sandboxId: sandbox.id,
+            sandboxWorkdir: sandbox.workdir,
+            updatedAt: new Date(),
+          })
+          .where(eq(projects.id, project.id))
+          .returning();
+        project = updated;
+        return sandbox;
+      })();
+      return sandboxPromise;
+    };
 
     const agent = new PiAgentRuntime(sandboxes);
     let sequence = 0;
-    let usedTool = false;
     let pendingDelta = "";
     let flushTimer: ReturnType<typeof setTimeout> | undefined;
     let flushPipeline = Promise.resolve();
@@ -167,7 +181,6 @@ export async function executeAgentRun(runId: string) {
         return;
       }
       await finishFlush();
-      usedTool = true;
       sequence += 1;
       await db.insert(agentRunEvents).values({
         runId,
@@ -180,28 +193,31 @@ export async function executeAgentRun(runId: string) {
 
     const turn = await agent.runTurn(
       {
-        sandboxId: project.sandboxId!,
-        workdir: project.sandboxWorkdir!,
+        workdir: project.sandboxWorkdir ?? UNPROVISIONED_WORKDIR,
         prompt: persistedSession
           ? promptMessage.content
           : promptWithConversation(conversation),
         sessionData: persistedSession,
+        resolveSandbox,
       },
       recordEvent,
     );
     await finishFlush();
-    const projectCheck = await sandboxes.execute(
-      project.sandboxId!,
-      runnableWebsiteCheckCommand(),
-      project.sandboxWorkdir!,
-      10,
-    );
-    const hasRunnableWebsite = projectCheck.exitCode === 0;
-    if (!hasRunnableWebsite && (usedTool || !response.trim())) {
-      throw new Error("The agent finished without creating a runnable website.");
+    let hasRunnableWebsite = false;
+    if (project.sandboxId && project.sandboxWorkdir) {
+      const projectCheck = await sandboxes.execute(
+        project.sandboxId,
+        runnableWebsiteCheckCommand(),
+        project.sandboxWorkdir,
+        10,
+      );
+      hasRunnableWebsite = projectCheck.exitCode === 0;
     }
-    if (hasRunnableWebsite) {
-      await sandboxes.startPreview(project.sandboxId!, project.sandboxWorkdir!);
+    if (!response.trim()) {
+      throw new Error("The agent finished without replying.");
+    }
+    if (hasRunnableWebsite && project.sandboxId && project.sandboxWorkdir) {
+      await sandboxes.startPreview(project.sandboxId, project.sandboxWorkdir);
     }
     const finalResponse =
       response.trim() || "The requested changes are running in the preview.";

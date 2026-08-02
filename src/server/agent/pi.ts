@@ -28,7 +28,6 @@ export class PiAgentRuntime implements AgentRuntime {
     onEvent: (event: AgentRuntimeEvent) => Promise<void> | void,
   ) {
     const env = arkEnv();
-    const sandbox = await this.sandboxes.ensureRunning(input.sandboxId);
     const modelRuntime = await ModelRuntime.create({
       modelsPath: null,
       allowModelNetwork: false,
@@ -79,7 +78,11 @@ export class PiAgentRuntime implements AgentRuntime {
         modelRuntime,
         thinkingLevel: "off",
         noTools: "builtin",
-        customTools: createDaytonaTools(sandbox, input.workdir),
+        customTools: createDaytonaTools(
+          this.sandboxes,
+          input.workdir,
+          input.resolveSandbox,
+        ),
         resourceLoader: projectResourceLoader(input.workdir),
         sessionManager: persistedSession.manager,
         settingsManager: SettingsManager.inMemory({
