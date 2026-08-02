@@ -70,14 +70,22 @@ export default async function Home() {
             <span className="title-outline">operational.</span>
           </h1>
 
-          <div className="chromatic-object" aria-hidden="true">
-            <span className="orbit orbit-one" />
-            <span className="orbit orbit-two" />
-            <span className="color-body" />
-            <span className="color-pin pin-pink" />
-            <span className="color-pin pin-lilac" />
-            <span className="color-pin pin-blue" />
-            <span className="color-pin pin-green" />
+          <div className="signal-visual" aria-hidden="true">
+            <span className="signal-plane" />
+            <span className="signal-beam" />
+            <span className="signal-axis" />
+            <div className="particle-field">
+              {Array.from({ length: 18 }, (_, index) => (
+                <span key={index} />
+              ))}
+            </div>
+            <div className="machine-lens">
+              <span className="lens-ring lens-ring-outer" />
+              <span className="lens-ring lens-ring-inner" />
+              <span className="lens-aperture" />
+              <span className="lens-slit" />
+            </div>
+            <span className="signal-caption">Live output / 01</span>
           </div>
         </div>
 
