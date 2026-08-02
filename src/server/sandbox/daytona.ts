@@ -12,7 +12,7 @@ import {
   type SandboxRuntime,
 } from "@/server/sandbox/runtime";
 
-const PREVIEW_SESSION = "project-l-preview";
+const PREVIEW_SESSION_PREFIX = "project-l-preview-";
 
 export class DaytonaSandboxRuntime implements SandboxRuntime {
   private readonly client: Daytona;
@@ -93,15 +93,16 @@ export class DaytonaSandboxRuntime implements SandboxRuntime {
       return;
     }
 
-    try {
-      await sandbox.process.getSession(PREVIEW_SESSION);
-      await sandbox.process.deleteSession(PREVIEW_SESSION);
-    } catch {
-      // There is no previous preview process to replace.
+    const sessions = await sandbox.process.listSessions();
+    for (const session of sessions) {
+      if (session.sessionId.startsWith(PREVIEW_SESSION_PREFIX)) {
+        await sandbox.process.deleteSession(session.sessionId);
+      }
     }
-    await sandbox.process.createSession(PREVIEW_SESSION);
+    const previewSession = `${PREVIEW_SESSION_PREFIX}${Date.now()}`;
+    await sandbox.process.createSession(previewSession);
 
-    const command = await sandbox.process.executeSessionCommand(PREVIEW_SESSION, {
+    const command = await sandbox.process.executeSessionCommand(previewSession, {
       command: `cd ${shellQuote(workdir)} && ${previewCommand(DEFAULT_PREVIEW_PORT)}`,
       runAsync: true,
     });
@@ -114,7 +115,7 @@ export class DaytonaSandboxRuntime implements SandboxRuntime {
     }
 
     const logs = await sandbox.process.getSessionCommandLogs(
-      PREVIEW_SESSION,
+      previewSession,
       command.cmdId,
     );
     const detail = (logs.stderr || logs.stdout || logs.output || "").trim();

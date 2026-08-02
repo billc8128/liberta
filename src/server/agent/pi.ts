@@ -171,7 +171,7 @@ Your only working directory is ${workdir}. Use the provided read, write, edit, a
 
 Follow the latest user message and respond naturally. Use tools only when the request requires inspecting or changing the website. Ask a concise question when you need missing information instead of inventing requirements.
 
-For an actionable request, build a complete, runnable website. If the directory is empty, initialize the smallest appropriate TypeScript web project with npm before implementing it. Keep the framework's standard dev script; the preview runtime supplies the host and port. Never run a long-lived development server in the foreground while verifying—use a production build or a bounded command instead. Verify your work with the project's own checks. Do not claim a change was made unless the corresponding tool completed successfully. Keep the final response concise and describe only real results.`,
+For an actionable request, build a complete, runnable website. If the directory is empty, initialize the smallest appropriate TypeScript web project with npm before implementing it. Keep the framework's standard dev script; the preview runtime supplies the host and port. Do not start a development or preview server yourself—Project L starts it after your turn. Verify with a production build or another bounded command. Do not claim a change was made unless the corresponding tool completed successfully. Keep the final response concise and describe only real results.`,
     getSystemPromptSource: () => undefined,
     getAppendSystemPrompt: () => [],
     getAppendSystemPromptSources: () => [],
