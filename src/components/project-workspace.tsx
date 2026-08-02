@@ -28,13 +28,6 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
   const [messageError, setMessageError] = useState<string>();
   const chatEnd = useRef<HTMLDivElement>(null);
 
-  const refreshState = useCallback(async () => {
-    const response = await fetch(`/api/projects/${state.project.id}`, {
-      cache: "no-store",
-    });
-    if (response.ok) setState((await response.json()) as ProjectStateDto);
-  }, [state.project.id]);
-
   const refreshPreview = useCallback(async () => {
     const response = await fetch(`/api/projects/${state.project.id}/preview`, {
       cache: "no-store",
@@ -46,10 +39,13 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
   }, [state.project.id]);
 
   useEffect(() => {
-    const active = state.run?.status === "queued" || state.run?.status === "running";
-    const timer = window.setInterval(refreshState, active ? 1_000 : 5_000);
-    return () => window.clearInterval(timer);
-  }, [refreshState, state.run?.status]);
+    const events = new EventSource(`/api/projects/${state.project.id}/events`);
+    const updateState = (event: MessageEvent<string>) => {
+      setState(JSON.parse(event.data) as ProjectStateDto);
+    };
+    events.addEventListener("state", updateState as EventListener);
+    return () => events.close();
+  }, [state.project.id]);
 
   useEffect(() => {
     if (state.project.status !== "ready" || previewUrl) return;
@@ -88,7 +84,6 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
 
     setChatPrompt("");
     setPreviewUrl(undefined);
-    await refreshState();
     setSending(false);
   }
 

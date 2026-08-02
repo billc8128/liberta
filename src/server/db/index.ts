@@ -9,7 +9,7 @@ import { postgresJsUrl } from "@/server/db/url";
 
 let client: ReturnType<typeof postgres> | undefined;
 
-export function database() {
+export function databaseClient() {
   if (!client) {
     client = postgres(postgresJsUrl(databaseEnv().DATABASE_URL), {
       max: 10,
@@ -17,5 +17,9 @@ export function database() {
     });
   }
 
-  return drizzle(client, { schema });
+  return client;
+}
+
+export function database() {
+  return drizzle(databaseClient(), { schema });
 }

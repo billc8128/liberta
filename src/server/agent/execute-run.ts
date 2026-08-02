@@ -2,18 +2,22 @@ import "server-only";
 
 import { and, asc, eq } from "drizzle-orm";
 
-import { simpleGreetingReply } from "@/server/agent/conversation";
 import { PiAgentRuntime } from "@/server/agent/pi";
 import type { AgentRuntimeEvent } from "@/server/agent/runtime";
+import {
+  loadProjectAgentSession,
+} from "@/server/agent/session-store";
 import { database } from "@/server/db";
 import {
   agentRunEvents,
   agentRuns,
   messages,
+  projectAgentSessions,
   projects,
 } from "@/server/db/schema";
 import { failAgentRun } from "@/server/projects/service";
 import { promptWithConversation } from "@/server/projects/prompt";
+import { publishProjectUpdate } from "@/server/projects/updates";
 import { DaytonaSandboxRuntime } from "@/server/sandbox/daytona";
 import { runnableWebsiteCheckCommand } from "@/server/sandbox/preview-command";
 
@@ -49,6 +53,7 @@ export async function executeAgentRun(runId: string) {
       .set({ status: "running", updatedAt: new Date() })
       .where(eq(projects.id, record.project.id));
   });
+  await publishProjectUpdate(record.project.id);
 
   let response = "";
   let responseMessageId: string | undefined;
@@ -59,17 +64,13 @@ export async function executeAgentRun(runId: string) {
       .from(messages)
       .where(eq(messages.projectId, record.project.id))
       .orderBy(asc(messages.createdAt));
-    const latestUserMessage = conversation.findLast(
-      (message) => message.role === "user",
+    const promptMessage = conversation.find(
+      (message) => message.id === record.run.promptMessageId,
     );
-    const greetingReply = latestUserMessage
-      ? simpleGreetingReply(latestUserMessage.content)
-      : undefined;
-
-    if (greetingReply) {
-      await completeTextOnlyRun(runId, record.project.id, greetingReply);
-      return;
+    if (!promptMessage) {
+      throw new Error(`Prompt message for agent run ${runId} does not exist.`);
     }
+    const persistedSession = await loadProjectAgentSession(record.project.id);
 
     const sandboxes = new DaytonaSandboxRuntime();
     let project = record.project;
@@ -106,6 +107,7 @@ export async function executeAgentRun(runId: string) {
       .update(agentRuns)
       .set({ responseMessageId })
       .where(eq(agentRuns.id, runId));
+    await publishProjectUpdate(project.id);
 
     const recordEvent = async (event: AgentRuntimeEvent) => {
       if (event.type === "text_delta") {
@@ -117,6 +119,7 @@ export async function executeAgentRun(runId: string) {
             .update(messages)
             .set({ content: response })
             .where(eq(messages.id, assistantMessage.id));
+          await publishProjectUpdate(project.id);
         }
         return;
       }
@@ -128,13 +131,17 @@ export async function executeAgentRun(runId: string) {
         type: event.type,
         payload: event,
       });
+      await publishProjectUpdate(project.id);
     };
 
-    await agent.runTurn(
+    const turn = await agent.runTurn(
       {
         sandboxId: project.sandboxId!,
         workdir: project.sandboxWorkdir!,
-        prompt: promptWithConversation(conversation),
+        prompt: persistedSession
+          ? promptMessage.content
+          : promptWithConversation(conversation),
+        sessionData: persistedSession,
       },
       recordEvent,
     );
@@ -151,15 +158,21 @@ export async function executeAgentRun(runId: string) {
     if (hasRunnableWebsite) {
       await sandboxes.startPreview(project.sandboxId!, project.sandboxWorkdir!);
     }
-
     const finalResponse =
       response.trim() || "The requested changes are running in the preview.";
-    await db
-      .update(messages)
-      .set({ status: "completed", content: finalResponse })
-      .where(eq(messages.id, assistantMessage.id));
 
     await db.transaction(async (transaction) => {
+      await transaction
+        .insert(projectAgentSessions)
+        .values({ projectId: project.id, data: turn.sessionData })
+        .onConflictDoUpdate({
+          target: projectAgentSessions.projectId,
+          set: { data: turn.sessionData, updatedAt: new Date() },
+        });
+      await transaction
+        .update(messages)
+        .set({ status: "completed", content: finalResponse })
+        .where(eq(messages.id, assistantMessage.id));
       await transaction
         .update(agentRuns)
         .set({
@@ -172,6 +185,7 @@ export async function executeAgentRun(runId: string) {
         .set({ status: "ready", updatedAt: new Date() })
         .where(eq(projects.id, project.id));
     });
+    await publishProjectUpdate(project.id);
   } catch (error) {
     if (responseMessageId) {
       await db
@@ -189,30 +203,4 @@ export async function executeAgentRun(runId: string) {
     );
     throw error;
   }
-}
-
-async function completeTextOnlyRun(
-  runId: string,
-  projectId: string,
-  content: string,
-) {
-  const db = database();
-  await db.transaction(async (transaction) => {
-    const [assistantMessage] = await transaction
-      .insert(messages)
-      .values({ projectId, role: "assistant", content })
-      .returning();
-    await transaction
-      .update(agentRuns)
-      .set({
-        status: "completed",
-        responseMessageId: assistantMessage.id,
-        completedAt: new Date(),
-      })
-      .where(eq(agentRuns.id, runId));
-    await transaction
-      .update(projects)
-      .set({ status: "ready", updatedAt: new Date() })
-      .where(eq(projects.id, projectId));
-  });
 }

@@ -12,11 +12,16 @@ export interface AgentTurnInput {
   sandboxId: string;
   workdir: string;
   prompt: string;
+  sessionData?: string;
+}
+
+export interface AgentTurnResult {
+  sessionData: string;
 }
 
 export interface AgentRuntime {
   runTurn(
     input: AgentTurnInput,
     onEvent: (event: AgentRuntimeEvent) => Promise<void> | void,
-  ): Promise<void>;
+  ): Promise<AgentTurnResult>;
 }

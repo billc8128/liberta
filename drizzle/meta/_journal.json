@@ -8,6 +8,13 @@
       "when": 1785482535540,
       "tag": "0000_giant_riptide",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1785643181300,
+      "tag": "0001_sweet_kabuki",
+      "breakpoints": true
     }
   ]
 }

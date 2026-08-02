@@ -153,6 +153,16 @@ export const projects = pgTable(
   (table) => [index("projects_owner_updated_idx").on(table.ownerId, table.updatedAt)],
 );
 
+export const projectAgentSessions = pgTable("project_agent_sessions", {
+  projectId: uuid("project_id")
+    .primaryKey()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  data: text("data").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const messages = pgTable(
   "messages",
   {
@@ -215,5 +225,6 @@ export const agentRunEvents = pgTable(
 );
 
 export type Project = typeof projects.$inferSelect;
+export type ProjectAgentSession = typeof projectAgentSessions.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 export type AgentRun = typeof agentRuns.$inferSelect;

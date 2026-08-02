@@ -12,6 +12,7 @@ import {
   projects,
 } from "@/server/db/schema";
 import { projectNameFromPrompt } from "@/server/projects/prompt";
+import { publishProjectUpdate } from "@/server/projects/updates";
 
 const promptSchema = z.string().trim().min(1).max(20_000);
 
@@ -20,7 +21,7 @@ export async function createProject(input: { ownerId: string; prompt: string }) 
   const prompt = promptSchema.parse(input.prompt);
   const model = arkEnv();
 
-  return database().transaction(async (transaction) => {
+  const result = await database().transaction(async (transaction) => {
     const [project] = await transaction
       .insert(projects)
       .values({
@@ -46,6 +47,8 @@ export async function createProject(input: { ownerId: string; prompt: string }) 
 
     return { project, run };
   });
+  await publishProjectUpdate(result.project.id);
+  return result;
 }
 
 export async function addProjectMessage(input: {
@@ -57,7 +60,7 @@ export async function addProjectMessage(input: {
   const model = arkEnv();
   const db = database();
 
-  return db.transaction(async (transaction) => {
+  const result = await db.transaction(async (transaction) => {
     const [project] = await transaction
       .select()
       .from(projects)
@@ -102,6 +105,8 @@ export async function addProjectMessage(input: {
 
     return { message, run };
   });
+  await publishProjectUpdate(result.message.projectId);
+  return result;
 }
 
 export async function failAgentRun(runId: string, code: string, message: string) {
@@ -122,6 +127,7 @@ export async function failAgentRun(runId: string, code: string, message: string)
       .update(projects)
       .set({ status: "failed", updatedAt: new Date() })
       .where(eq(projects.id, run.projectId));
+    await publishProjectUpdate(run.projectId);
   }
 }
 
