@@ -1,6 +1,6 @@
 import "server-only";
 
-import { Daytona, SandboxState } from "@daytona/sdk";
+import { Daytona, Image, SandboxState } from "@daytona/sdk";
 
 import { daytonaEnv } from "@/lib/env/server";
 import { previewCommand } from "@/server/sandbox/preview-command";
@@ -13,6 +13,11 @@ import {
 } from "@/server/sandbox/runtime";
 
 const PREVIEW_SESSION_PREFIX = "project-l-preview-";
+const PROJECT_SANDBOX_IMAGE = Image.base("node:22-bookworm-slim")
+  .runCommands(
+    "apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git ripgrep && rm -rf /var/lib/apt/lists/*",
+  )
+  .workdir("/workspace");
 
 export class DaytonaSandboxRuntime implements SandboxRuntime {
   private readonly client: Daytona;
@@ -30,7 +35,13 @@ export class DaytonaSandboxRuntime implements SandboxRuntime {
     const sandbox = await this.client.create(
       {
         name: `project-l-${projectId}`,
+        image: PROJECT_SANDBOX_IMAGE,
         language: "typescript",
+        resources: {
+          cpu: 1,
+          memory: 1,
+          disk: 1,
+        },
         labels: {
           product: "project-l",
           projectId,
