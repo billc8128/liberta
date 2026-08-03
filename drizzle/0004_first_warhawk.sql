@@ -1,0 +1,2 @@
+DROP INDEX "agent_session_entries_session_pi_id_idx";--> statement-breakpoint
+CREATE UNIQUE INDEX "agent_session_entries_session_pi_id_idx" ON "agent_session_entries" USING btree ("session_id","generation","pi_entry_id");

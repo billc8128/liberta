@@ -22,6 +22,20 @@
       "when": 1785744339215,
       "tag": "0002_dusty_the_order",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785746734507,
+      "tag": "0003_polite_serpent_society",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785747201997,
+      "tag": "0004_first_warhawk",
+      "breakpoints": true
     }
   ]
 }

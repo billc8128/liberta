@@ -33,7 +33,8 @@ export interface AgentTurnResult {
 }
 
 export type AgentCheckpoint =
-  | { type: "session"; sessionData: string }
+  | { type: "entry"; entry: Record<string, unknown> }
+  | { type: "snapshot"; sessionData: string; rebased?: boolean }
   | {
       type: "tool_started";
       sessionData: string;

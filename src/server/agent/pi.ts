@@ -85,12 +85,11 @@ export class PiAgentRuntime implements AgentRuntime {
       );
       return checkpointPipeline;
     };
-    const checkpoint = () => {
-      void persistCheckpoint({
-        type: "session",
-        sessionData: persistedSession.serialize(),
-      });
-    };
+    let settled = false;
+    let resolveSettled = () => {};
+    const settledPromise = new Promise<void>((resolve) => {
+      resolveSettled = resolve;
+    });
 
     let unsubscribe = () => {};
     const abortSession = () => {
@@ -148,7 +147,14 @@ export class PiAgentRuntime implements AgentRuntime {
 
       unsubscribe = session.subscribe((event) => {
         if (event.type === "entry_appended") {
-          checkpoint();
+          void persistCheckpoint({
+            type: "entry",
+            entry: event.entry as unknown as Record<string, unknown>,
+          });
+        }
+        if (event.type === "agent_settled") {
+          settled = true;
+          resolveSettled();
         }
         if (event.type === "message_start" && event.message.role === "assistant") {
           assistantTextLength = 0;
@@ -214,6 +220,11 @@ export class PiAgentRuntime implements AgentRuntime {
         }
       });
 
+      await persistCheckpoint({
+        type: "snapshot",
+        sessionData: persistedSession.serialize(),
+      });
+
       input.signal.throwIfAborted();
       if (input.resume) {
         await session.sendCustomMessage(
@@ -230,6 +241,7 @@ export class PiAgentRuntime implements AgentRuntime {
           source: "rpc",
         });
       }
+      if (!settled) await waitForSettlement(settledPromise, input.signal);
       await Promise.all([eventPipeline, checkpointPipeline]);
       input.signal.throwIfAborted();
       if (modelError) {
@@ -253,7 +265,7 @@ export class PiAgentRuntime implements AgentRuntime {
       }
 
       const sessionData = persistedSession.serialize();
-      await persistCheckpoint({ type: "session", sessionData });
+      await persistCheckpoint({ type: "snapshot", sessionData, rebased });
       return { sessionData, rebased };
     } finally {
       unsubscribe();
@@ -263,6 +275,21 @@ export class PiAgentRuntime implements AgentRuntime {
       persistedSession.close();
     }
   }
+}
+
+async function waitForSettlement(settled: Promise<void>, signal: AbortSignal) {
+  await Promise.race([
+    settled,
+    new Promise<never>((_, reject) => {
+      if (signal.aborted) {
+        reject(signal.reason);
+        return;
+      }
+      signal.addEventListener("abort", () => reject(signal.reason), {
+        once: true,
+      });
+    }),
+  ]);
 }
 
 function repairInterruptedTools(

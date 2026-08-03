@@ -160,14 +160,42 @@ export const projects = pgTable(
   (table) => [index("projects_owner_updated_idx").on(table.ownerId, table.updatedAt)],
 );
 
-export const projectAgentSessions = pgTable("project_agent_sessions", {
-  projectId: uuid("project_id")
+export const agentSessions = pgTable(
+  "agent_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    piSessionId: text("pi_session_id"),
+    headEntryId: text("head_entry_id"),
+    latestCompactionEntryId: text("latest_compaction_entry_id"),
+    activeRunId: uuid("active_run_id"),
+    currentGeneration: integer("current_generation").notNull().default(0),
+    entryCount: integer("entry_count").notNull().default(0),
+    rebasedAt: timestamp("rebased_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("agent_sessions_project_idx").on(table.projectId),
+  ],
+);
+
+export const agentSessionSnapshots = pgTable("agent_session_snapshots", {
+  sessionId: uuid("session_id")
     .primaryKey()
-    .references(() => projects.id, { onDelete: "cascade" }),
+    .references(() => agentSessions.id, { onDelete: "cascade" }),
+  generation: integer("generation").notNull().default(0),
+  throughSequence: integer("through_sequence").notNull().default(-1),
+  headEntryId: text("head_entry_id"),
   data: text("data").notNull(),
-  runId: uuid("run_id"),
   byteSize: integer("byte_size").notNull().default(0),
-  rebasedAt: timestamp("rebased_at", { withTimezone: true }),
+  compactedAt: timestamp("compacted_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -197,6 +225,9 @@ export const agentRuns = pgTable(
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
+    sessionId: uuid("session_id").references(() => agentSessions.id, {
+      onDelete: "set null",
+    }),
     promptMessageId: uuid("prompt_message_id")
       .notNull()
       .references(() => messages.id, { onDelete: "restrict" }),
@@ -214,6 +245,8 @@ export const agentRuns = pgTable(
     heartbeatAt: timestamp("heartbeat_at", { withTimezone: true }),
     attempt: integer("attempt").notNull().default(0),
     checkpointSequence: integer("checkpoint_sequence").notNull().default(0),
+    startEntrySequence: integer("start_entry_sequence"),
+    endEntrySequence: integer("end_entry_sequence"),
     cancelRequestedAt: timestamp("cancel_requested_at", { withTimezone: true }),
     startedAt: timestamp("started_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
@@ -222,6 +255,40 @@ export const agentRuns = pgTable(
       .defaultNow(),
   },
   (table) => [index("agent_runs_project_created_idx").on(table.projectId, table.createdAt)],
+);
+
+export const agentSessionEntries = pgTable(
+  "agent_session_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => agentSessions.id, { onDelete: "cascade" }),
+    runId: uuid("run_id").references(() => agentRuns.id, {
+      onDelete: "set null",
+    }),
+    sequence: integer("sequence").notNull(),
+    generation: integer("generation").notNull().default(0),
+    piEntryId: text("pi_entry_id").notNull(),
+    parentPiEntryId: text("parent_pi_entry_id"),
+    entryType: text("entry_type").notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("agent_session_entries_session_sequence_idx").on(
+      table.sessionId,
+      table.sequence,
+    ),
+    uniqueIndex("agent_session_entries_session_pi_id_idx").on(
+      table.sessionId,
+      table.generation,
+      table.piEntryId,
+    ),
+    index("agent_session_entries_run_idx").on(table.runId),
+  ],
 );
 
 export const agentRunTools = pgTable(
@@ -267,7 +334,9 @@ export const agentRunEvents = pgTable(
 );
 
 export type Project = typeof projects.$inferSelect;
-export type ProjectAgentSession = typeof projectAgentSessions.$inferSelect;
+export type AgentSession = typeof agentSessions.$inferSelect;
+export type AgentSessionEntry = typeof agentSessionEntries.$inferSelect;
+export type AgentSessionSnapshot = typeof agentSessionSnapshots.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 export type AgentRun = typeof agentRuns.$inferSelect;
 export type AgentRunTool = typeof agentRunTools.$inferSelect;

@@ -5,7 +5,10 @@ import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, isNull, lt, or, sql } from "drizzle-orm";
 
 import { PiAgentRuntime } from "@/server/agent/pi";
-import { piSessionByteSize } from "@/server/agent/pi-session";
+import {
+  parsePiSessionData,
+  piSessionByteSize,
+} from "@/server/agent/pi-session";
 import type {
   AgentCheckpoint,
   AgentRuntimeEvent,
@@ -16,8 +19,10 @@ import {
   agentRunEvents,
   agentRuns,
   agentRunTools,
+  agentSessionEntries,
+  agentSessionSnapshots,
+  agentSessions,
   messages,
-  projectAgentSessions,
   projects,
 } from "@/server/db/schema";
 import { promptWithConversation } from "@/server/projects/prompt";
@@ -162,6 +167,23 @@ export async function executeAgentRun(
           .orderBy(asc(agentRunTools.startedAt))
       : [];
 
+    await db.transaction(async (transaction) => {
+      await transaction
+        .update(agentRuns)
+        .set({
+          sessionId: persistedSession.id,
+          startEntrySequence:
+            record.run.startEntrySequence ?? persistedSession.entryCount,
+        })
+        .where(
+          and(eq(agentRuns.id, runId), eq(agentRuns.leaseToken, leaseToken)),
+        );
+      await transaction
+        .update(agentSessions)
+        .set({ activeRunId: runId, updatedAt: new Date() })
+        .where(eq(agentSessions.id, persistedSession.id));
+    });
+
     const sandboxes = new DaytonaSandboxRuntime();
     let project = record.project;
     let sandboxPromise: Promise<{ id: string; workdir: string }> | undefined;
@@ -209,23 +231,112 @@ export async function executeAgentRun(
           .returning({ id: agentRuns.id });
         if (!fenced) throw new RunLeaseLostError();
 
-        await transaction
-          .insert(projectAgentSessions)
-          .values({
-            projectId: project.id,
-            runId,
-            data: entry.sessionData,
-            byteSize: piSessionByteSize(entry.sessionData),
-          })
-          .onConflictDoUpdate({
-            target: projectAgentSessions.projectId,
-            set: {
+        const [storedSession] = await transaction
+          .select()
+          .from(agentSessions)
+          .where(eq(agentSessions.id, persistedSession.id))
+          .limit(1)
+          .for("update");
+        if (!storedSession) throw new Error("Agent session does not exist.");
+
+        const rebased = entry.type === "snapshot" && entry.rebased === true;
+        const generation = rebased
+          ? storedSession.currentGeneration + 1
+          : storedSession.currentGeneration;
+        const sessionData = entry.type === "entry" ? undefined : entry.sessionData;
+        const payloads =
+          entry.type === "entry"
+            ? [entry.entry]
+            : parsePiSessionData(entry.sessionData);
+        let nextSequence = storedSession.entryCount;
+        let headEntryId = storedSession.headEntryId;
+        let piSessionId = storedSession.piSessionId;
+        let latestCompactionEntryId =
+          storedSession.latestCompactionEntryId;
+
+        for (const payload of payloads) {
+          const piEntryId = String(payload.id ?? "");
+          if (!piEntryId) throw new Error("Pi session entry is missing its id.");
+          const entryType = String(payload.type ?? "unknown");
+          const [inserted] = await transaction
+            .insert(agentSessionEntries)
+            .values({
+              sessionId: storedSession.id,
               runId,
-              data: entry.sessionData,
-              byteSize: piSessionByteSize(entry.sessionData),
+              sequence: nextSequence,
+              generation,
+              piEntryId,
+              parentPiEntryId:
+                typeof payload.parentId === "string" ? payload.parentId : null,
+              entryType,
+              payload,
+            })
+            .onConflictDoNothing({
+              target: [
+                agentSessionEntries.sessionId,
+                agentSessionEntries.generation,
+                agentSessionEntries.piEntryId,
+              ],
+            })
+            .returning({ id: agentSessionEntries.id });
+          if (!inserted) continue;
+          nextSequence += 1;
+          headEntryId = piEntryId;
+          if (entryType === "session") piSessionId = piEntryId;
+          if (entryType === "compaction") {
+            latestCompactionEntryId = piEntryId;
+          }
+        }
+
+        await transaction
+          .update(agentSessions)
+          .set({
+            piSessionId,
+            headEntryId,
+            latestCompactionEntryId,
+            activeRunId: runId,
+            currentGeneration: generation,
+            entryCount: nextSequence,
+            rebasedAt: rebased ? checkpointAt : storedSession.rebasedAt,
+            updatedAt: checkpointAt,
+          })
+          .where(eq(agentSessions.id, storedSession.id));
+
+        if (sessionData) {
+          const [existingSnapshot] = await transaction
+            .select()
+            .from(agentSessionSnapshots)
+            .where(eq(agentSessionSnapshots.sessionId, storedSession.id))
+            .limit(1);
+          await transaction
+            .insert(agentSessionSnapshots)
+            .values({
+              sessionId: storedSession.id,
+              generation,
+              throughSequence: nextSequence - 1,
+              headEntryId,
+              data: sessionData,
+              byteSize: piSessionByteSize(sessionData),
+              compactedAt: rebased
+                ? checkpointAt
+                : existingSnapshot?.compactedAt,
               updatedAt: checkpointAt,
-            },
-          });
+            })
+            .onConflictDoUpdate({
+              target: agentSessionSnapshots.sessionId,
+              set: {
+                generation,
+                throughSequence: nextSequence - 1,
+                headEntryId,
+                data: sessionData,
+                byteSize: piSessionByteSize(sessionData),
+                compactedAt: rebased
+                  ? checkpointAt
+                  : existingSnapshot?.compactedAt,
+                updatedAt: checkpointAt,
+              },
+            });
+        }
 
         if (entry.type === "tool_started") {
           await transaction
@@ -379,7 +490,7 @@ export async function executeAgentRun(
     };
 
     const agent = new PiAgentRuntime(sandboxes);
-    const turn = await agent.runTurn(
+    await agent.runTurn(
       {
         workdir: project.sandboxWorkdir ?? UNPROVISIONED_WORKDIR,
         prompt: persistedSession
@@ -418,10 +529,18 @@ export async function executeAgentRun(
     }
 
     await db.transaction(async (transaction) => {
+      const [finalSession] = await transaction
+        .select({ entryCount: agentSessions.entryCount })
+        .from(agentSessions)
+        .where(eq(agentSessions.id, persistedSession.id))
+        .limit(1);
+      if (!finalSession) throw new Error("Agent session does not exist.");
       const [completed] = await transaction
         .update(agentRuns)
         .set({
           status: "completed",
+          sessionId: persistedSession.id,
+          endEntrySequence: finalSession.entryCount - 1,
           completedAt: new Date(),
           leaseOwner: null,
           leaseToken: null,
@@ -438,26 +557,9 @@ export async function executeAgentRun(
       if (!completed) throw new RunLeaseLostError();
 
       await transaction
-        .insert(projectAgentSessions)
-        .values({
-          projectId: project.id,
-          runId: null,
-          data: turn.sessionData,
-          byteSize: piSessionByteSize(turn.sessionData),
-          rebasedAt: turn.rebased ? new Date() : null,
-        })
-        .onConflictDoUpdate({
-          target: projectAgentSessions.projectId,
-          set: {
-            runId: null,
-            data: turn.sessionData,
-            byteSize: piSessionByteSize(turn.sessionData),
-            rebasedAt: turn.rebased
-              ? new Date()
-              : persistedSession?.rebasedAt ?? null,
-            updatedAt: new Date(),
-          },
-        });
+        .update(agentSessions)
+        .set({ activeRunId: null, updatedAt: new Date() })
+        .where(eq(agentSessions.id, persistedSession.id));
       await transaction
         .update(messages)
         .set({ status: "completed", content: response.trim() })
@@ -481,6 +583,15 @@ export async function executeAgentRun(
       current.cancelRequestedAt !== null ||
       error instanceof RunCancelledError ||
       controller.signal.reason instanceof RunCancelledError;
+    const failedSession = current.sessionId
+      ? (
+          await db
+            .select({ entryCount: agentSessions.entryCount })
+            .from(agentSessions)
+            .where(eq(agentSessions.id, current.sessionId))
+            .limit(1)
+        )[0]
+      : undefined;
     await db.transaction(async (transaction) => {
       const [finished] = await transaction
         .update(agentRuns)
@@ -492,6 +603,9 @@ export async function executeAgentRun(
             : error instanceof Error
               ? error.message
               : "Unknown agent failure",
+          endEntrySequence: failedSession
+            ? failedSession.entryCount - 1
+            : current.endEntrySequence,
           completedAt: new Date(),
           leaseOwner: null,
           leaseToken: null,
@@ -502,6 +616,12 @@ export async function executeAgentRun(
         )
         .returning({ id: agentRuns.id });
       if (!finished) return;
+      if (current.sessionId) {
+        await transaction
+          .update(agentSessions)
+          .set({ activeRunId: null, updatedAt: new Date() })
+          .where(eq(agentSessions.id, current.sessionId));
+      }
       if (responseMessageId) {
         await transaction
           .update(messages)

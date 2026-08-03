@@ -1,12 +1,37 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  appendPiSessionEntries,
   openPiSession,
+  parsePiSessionData,
   piSessionByteSize,
   rebasePiSession,
 } from "./pi-session";
 
 describe("openPiSession", () => {
+  it("serializes the header before the first message", () => {
+    const session = openPiSession("/workspace/project");
+    const entries = parsePiSessionData(session.serialize());
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ type: "session" });
+    session.close();
+  });
+
+  it("rebuilds a snapshot with later append-only entries", () => {
+    const snapshot = `${JSON.stringify({ type: "session", id: "s1" })}\n`;
+    const rebuilt = appendPiSessionEntries(snapshot, [
+      { type: "message", id: "m1", parentId: null },
+      { type: "message", id: "m2", parentId: "m1" },
+    ]);
+
+    expect(parsePiSessionData(rebuilt).map((entry) => entry.id)).toEqual([
+      "s1",
+      "m1",
+      "m2",
+    ]);
+  });
+
   it("serializes and restores the Pi conversation", () => {
     const first = openPiSession("/workspace/project");
     first.manager.appendCustomMessageEntry(
