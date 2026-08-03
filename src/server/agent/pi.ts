@@ -43,11 +43,15 @@ export class PiAgentRuntime implements AgentRuntime {
         {
           id: env.ARK_MODEL_ID,
           name: env.ARK_MODEL_ID,
-          reasoning: false,
-          input: ["text", "image"],
+          reasoning: true,
+          input: ["text"],
           cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-          contextWindow: 128_000,
-          maxTokens: 32_000,
+          contextWindow: 1_048_576,
+          maxTokens: 128_000,
+          compat: {
+            supportsDeveloperRole: false,
+            supportsStrictMode: false,
+          },
         },
       ],
     });
@@ -76,7 +80,7 @@ export class PiAgentRuntime implements AgentRuntime {
         cwd: input.workdir,
         model,
         modelRuntime,
-        thinkingLevel: "off",
+        thinkingLevel: "medium",
         noTools: "builtin",
         customTools: createDaytonaTools(
           this.sandboxes,
@@ -86,7 +90,11 @@ export class PiAgentRuntime implements AgentRuntime {
         resourceLoader: projectResourceLoader(input.workdir),
         sessionManager: persistedSession.manager,
         settingsManager: SettingsManager.inMemory({
-          compaction: { enabled: true },
+          compaction: {
+            enabled: true,
+            reserveTokens: 32_768,
+            keepRecentTokens: 20_000,
+          },
           retry: { enabled: true, maxRetries: 2 },
         }),
       }));

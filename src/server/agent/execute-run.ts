@@ -4,7 +4,6 @@ import { and, asc, eq } from "drizzle-orm";
 
 import { PiAgentRuntime } from "@/server/agent/pi";
 import type { AgentRuntimeEvent } from "@/server/agent/runtime";
-import { authorizeCodingTools } from "@/server/agent/tool-authorization";
 import {
   loadProjectAgentSession,
 } from "@/server/agent/session-store";
@@ -81,17 +80,10 @@ export async function executeAgentRun(runId: string) {
 
     const sandboxes = new DaytonaSandboxRuntime();
     let project = record.project;
-    let toolAuthorization: Promise<boolean> | undefined;
     let sandboxPromise:
       | Promise<{ id: string; workdir: string }>
       | undefined;
     const resolveSandbox = async () => {
-      toolAuthorization ??= authorizeCodingTools(conversation);
-      if (!(await toolAuthorization)) {
-        throw new Error(
-          "The user has not authorized coding tools. Reply briefly without tools or ask one concise question.",
-        );
-      }
       if (project.sandboxId && project.sandboxWorkdir) {
         return {
           id: project.sandboxId,

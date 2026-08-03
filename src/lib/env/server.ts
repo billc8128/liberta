@@ -26,7 +26,7 @@ const arkSchema = z.object({
   ARK_MODEL_ID: z
     .string()
     .min(1)
-    .default("doubao-seed-2-0-code-preview-260215"),
+    .default("glm-5-2"),
 });
 
 export function databaseEnv() {
