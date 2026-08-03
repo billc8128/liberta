@@ -8,6 +8,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -131,6 +132,12 @@ export const runStatus = pgEnum("run_status", [
   "cancelled",
 ]);
 
+export const toolExecutionStatus = pgEnum("tool_execution_status", [
+  "started",
+  "completed",
+  "failed",
+]);
+
 export const projects = pgTable(
   "projects",
   {
@@ -158,6 +165,9 @@ export const projectAgentSessions = pgTable("project_agent_sessions", {
     .primaryKey()
     .references(() => projects.id, { onDelete: "cascade" }),
   data: text("data").notNull(),
+  runId: uuid("run_id"),
+  byteSize: integer("byte_size").notNull().default(0),
+  rebasedAt: timestamp("rebased_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -198,6 +208,13 @@ export const agentRuns = pgTable(
     modelId: text("model_id").notNull(),
     errorCode: text("error_code"),
     errorMessage: text("error_message"),
+    leaseOwner: text("lease_owner"),
+    leaseToken: uuid("lease_token"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    heartbeatAt: timestamp("heartbeat_at", { withTimezone: true }),
+    attempt: integer("attempt").notNull().default(0),
+    checkpointSequence: integer("checkpoint_sequence").notNull().default(0),
+    cancelRequestedAt: timestamp("cancel_requested_at", { withTimezone: true }),
     startedAt: timestamp("started_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -205,6 +222,31 @@ export const agentRuns = pgTable(
       .defaultNow(),
   },
   (table) => [index("agent_runs_project_created_idx").on(table.projectId, table.createdAt)],
+);
+
+export const agentRunTools = pgTable(
+  "agent_run_tools",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => agentRuns.id, { onDelete: "cascade" }),
+    toolCallId: text("tool_call_id").notNull(),
+    toolName: text("tool_name").notNull(),
+    status: toolExecutionStatus("status").notNull(),
+    args: jsonb("args").$type<unknown>().notNull(),
+    result: jsonb("result").$type<unknown>(),
+    startedAt: timestamp("started_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("agent_run_tools_run_call_idx").on(
+      table.runId,
+      table.toolCallId,
+    ),
+  ],
 );
 
 export const agentRunEvents = pgTable(
@@ -228,3 +270,4 @@ export type Project = typeof projects.$inferSelect;
 export type ProjectAgentSession = typeof projectAgentSessions.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 export type AgentRun = typeof agentRuns.$inferSelect;
+export type AgentRunTool = typeof agentRunTools.$inferSelect;

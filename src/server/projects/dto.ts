@@ -26,6 +26,7 @@ export function toProjectStateDto(state: ProjectState): ProjectStateDto {
           id: state.run.id,
           status: state.run.status,
           errorMessage: state.run.errorMessage,
+          cancelRequestedAt: state.run.cancelRequestedAt?.toISOString() ?? null,
           createdAt: state.run.createdAt.toISOString(),
         }
       : null,

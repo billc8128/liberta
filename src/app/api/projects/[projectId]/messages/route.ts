@@ -39,6 +39,7 @@ export async function POST(request: Request, context: ProjectRouteContext) {
           id: run.id,
           status: run.status,
           errorMessage: run.errorMessage,
+          cancelRequestedAt: run.cancelRequestedAt?.toISOString() ?? null,
           createdAt: run.createdAt.toISOString(),
         },
       },

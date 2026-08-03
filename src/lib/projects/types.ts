@@ -17,6 +17,7 @@ export interface ProjectStateDto {
     id: string;
     status: "queued" | "running" | "completed" | "failed" | "cancelled";
     errorMessage: string | null;
+    cancelRequestedAt: string | null;
     createdAt: string;
   };
   events: Array<{

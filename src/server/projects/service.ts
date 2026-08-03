@@ -122,6 +122,69 @@ export async function failAgentRun(runId: string, code: string, message: string)
   }
 }
 
+export async function cancelProjectRun(input: {
+  ownerId: string;
+  projectId: string;
+  runId: string;
+}) {
+  const result = await database().transaction(async (transaction) => {
+    const [record] = await transaction
+      .select({ run: agentRuns })
+      .from(agentRuns)
+      .innerJoin(projects, eq(agentRuns.projectId, projects.id))
+      .where(
+        and(
+          eq(agentRuns.id, input.runId),
+          eq(agentRuns.projectId, input.projectId),
+          eq(projects.ownerId, input.ownerId),
+        ),
+      )
+      .limit(1);
+    if (!record) throw new ProjectAccessError();
+    if (record.run.status !== "queued" && record.run.status !== "running") {
+      return record.run;
+    }
+
+    const requestedAt = new Date();
+    let [run] = await transaction
+      .update(agentRuns)
+      .set(
+        record.run.status === "queued"
+          ? {
+              status: "cancelled",
+              cancelRequestedAt: requestedAt,
+              completedAt: requestedAt,
+            }
+          : { cancelRequestedAt: requestedAt },
+      )
+      .where(
+        and(
+          eq(agentRuns.id, input.runId),
+          eq(agentRuns.status, record.run.status),
+        ),
+      )
+      .returning();
+    if (!run && record.run.status === "queued") {
+      [run] = await transaction
+        .update(agentRuns)
+        .set({ cancelRequestedAt: requestedAt })
+        .where(
+          and(eq(agentRuns.id, input.runId), eq(agentRuns.status, "running")),
+        )
+        .returning();
+    }
+    if (run?.status === "cancelled") {
+      await transaction
+        .update(projects)
+        .set({ status: "ready", updatedAt: requestedAt })
+        .where(eq(projects.id, input.projectId));
+    }
+    return run ?? record.run;
+  });
+  await publishProjectUpdate(input.projectId);
+  return result;
+}
+
 export async function getProjectState(ownerId: string, projectId: string) {
   const db = database();
   const [project] = await db

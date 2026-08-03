@@ -10,7 +10,12 @@ import {
 
 import { arkEnv } from "@/lib/env/server";
 import { createDaytonaTools } from "@/server/agent/daytona-tools";
-import { openPiSession } from "@/server/agent/pi-session";
+import {
+  MAX_PROJECT_SESSION_BYTES,
+  openPiSession,
+  piSessionByteSize,
+  rebasePiSession,
+} from "@/server/agent/pi-session";
 import type {
   AgentRuntime,
   AgentRuntimeEvent,
@@ -47,7 +52,7 @@ export class PiAgentRuntime implements AgentRuntime {
           input: ["text"],
           cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
           contextWindow: 1_048_576,
-          maxTokens: 128_000,
+          maxTokens: 32_768,
           compat: {
             supportsDeveloperRole: false,
             supportsStrictMode: false,
@@ -63,43 +68,88 @@ export class PiAgentRuntime implements AgentRuntime {
     }
 
     const persistedSession = openPiSession(input.workdir, input.sessionData);
+    repairInterruptedTools(persistedSession.manager, input.recoveryTools);
     let session: Awaited<ReturnType<typeof createAgentSession>>["session"] | undefined;
 
     let eventPipeline = Promise.resolve();
+    let checkpointPipeline = Promise.resolve();
     let assistantTextLength = 0;
     let assistantEmittedText = false;
     let modelError: string | undefined;
     const emit = (event: AgentRuntimeEvent) => {
       eventPipeline = eventPipeline.then(() => onEvent(event));
     };
+    const persistCheckpoint = (entry: Parameters<typeof input.onCheckpoint>[0]) => {
+      checkpointPipeline = checkpointPipeline.then(() =>
+        input.onCheckpoint(entry),
+      );
+      return checkpointPipeline;
+    };
+    const checkpoint = () => {
+      void persistCheckpoint({
+        type: "session",
+        sessionData: persistedSession.serialize(),
+      });
+    };
 
     let unsubscribe = () => {};
+    const abortSession = () => {
+      void session?.abort().catch(() => {});
+    };
 
     try {
+      const tools = createDaytonaTools(
+        this.sandboxes,
+        input.workdir,
+        input.resolveSandbox,
+        {
+          started: async (toolCallId, toolName, args) => {
+            await persistCheckpoint({
+              type: "tool_started",
+              sessionData: persistedSession.serialize(),
+              toolCallId,
+              toolName,
+              args,
+            });
+          },
+          finished: async (toolCallId, toolName, result, isError) => {
+            await persistCheckpoint({
+              type: "tool_finished",
+              sessionData: persistedSession.serialize(),
+              toolCallId,
+              toolName,
+              result,
+              isError,
+            });
+          },
+        },
+      );
+
       ({ session } = await createAgentSession({
         cwd: input.workdir,
         model,
         modelRuntime,
         thinkingLevel: "medium",
         noTools: "builtin",
-        customTools: createDaytonaTools(
-          this.sandboxes,
-          input.workdir,
-          input.resolveSandbox,
-        ),
+        customTools: tools,
         resourceLoader: projectResourceLoader(input.workdir),
         sessionManager: persistedSession.manager,
         settingsManager: SettingsManager.inMemory({
           compaction: {
             enabled: true,
-            reserveTokens: 32_768,
-            keepRecentTokens: 20_000,
+            reserveTokens: 65_536,
+            keepRecentTokens: 32_768,
           },
           retry: { enabled: true, maxRetries: 2 },
         }),
       }));
 
+      input.signal.addEventListener("abort", abortSession, { once: true });
+
       unsubscribe = session.subscribe((event) => {
+        if (event.type === "entry_appended") {
+          checkpoint();
+        }
         if (event.type === "message_start" && event.message.role === "assistant") {
           assistantTextLength = 0;
           assistantEmittedText = false;
@@ -164,20 +214,103 @@ export class PiAgentRuntime implements AgentRuntime {
         }
       });
 
-      await session.prompt(input.prompt, {
-        expandPromptTemplates: false,
-        source: "rpc",
-      });
-      await eventPipeline;
+      input.signal.throwIfAborted();
+      if (input.resume) {
+        await session.sendCustomMessage(
+          {
+            customType: "project-l-run-recovery",
+            content: recoveryPrompt(input.recoveryTools),
+            display: false,
+          },
+          { triggerTurn: true },
+        );
+      } else {
+        await session.prompt(input.prompt, {
+          expandPromptTemplates: false,
+          source: "rpc",
+        });
+      }
+      await Promise.all([eventPipeline, checkpointPipeline]);
+      input.signal.throwIfAborted();
       if (modelError) {
         throw new Error(`Ark model request failed: ${modelError}`);
       }
-      return { sessionData: persistedSession.serialize() };
+
+      let rebased = false;
+      if (
+        piSessionByteSize(persistedSession.serialize()) >
+        MAX_PROJECT_SESSION_BYTES
+      ) {
+        try {
+          await session.compact(
+            "Preserve project requirements, decisions, completed work, current file state, unresolved problems, and the user's latest intent.",
+          );
+          rebasePiSession(persistedSession.manager);
+          rebased = true;
+        } catch (error) {
+          console.warn("Project agent session rebase failed", error);
+        }
+      }
+
+      const sessionData = persistedSession.serialize();
+      await persistCheckpoint({ type: "session", sessionData });
+      return { sessionData, rebased };
     } finally {
       unsubscribe();
+      input.signal.removeEventListener("abort", abortSession);
+      await Promise.allSettled([eventPipeline, checkpointPipeline]);
       session?.dispose();
       persistedSession.close();
     }
+  }
+}
+
+function repairInterruptedTools(
+  manager: ReturnType<typeof openPiSession>["manager"],
+  tools: AgentTurnInput["recoveryTools"],
+) {
+  const recordedResults = new Set(
+    manager
+      .buildSessionContext()
+      .messages.filter((message) => message.role === "toolResult")
+      .map((message) => message.toolCallId),
+  );
+
+  for (const tool of tools) {
+    if (recordedResults.has(tool.toolCallId)) continue;
+    const interrupted = tool.status === "started";
+    manager.appendMessage({
+      role: "toolResult",
+      toolCallId: tool.toolCallId,
+      toolName: tool.toolName,
+      content: [
+        {
+          type: "text",
+          text: interrupted
+            ? "Execution was interrupted before its result was recorded. The sandbox may contain partial changes; inspect its current state before deciding whether to retry."
+            : serializeToolResult(tool.result),
+        },
+      ],
+      isError: interrupted || tool.status === "failed",
+      timestamp: Date.now(),
+    });
+  }
+}
+
+function recoveryPrompt(tools: AgentTurnInput["recoveryTools"]) {
+  const interrupted = tools.filter((tool) => tool.status === "started");
+  const detail = interrupted.length
+    ? ` Interrupted tools: ${interrupted.map((tool) => tool.toolName).join(", ")}.`
+    : "";
+  return `Resume the interrupted turn from the persisted session.${detail} Inspect the current sandbox before repeating any side effect, continue the user's original request, and give only the final result.`;
+}
+
+function serializeToolResult(result: unknown) {
+  if (typeof result === "string") return result;
+  try {
+    return JSON.stringify(result);
+  } catch {
+    return String(result);
   }
 }
 

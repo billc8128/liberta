@@ -12,5 +12,5 @@ export async function loadProjectAgentSession(projectId: string) {
     .where(eq(projectAgentSessions.projectId, projectId))
     .limit(1);
 
-  return session?.data;
+  return session;
 }

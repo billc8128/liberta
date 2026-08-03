@@ -15,6 +15,13 @@
       "when": 1785643181300,
       "tag": "0001_sweet_kabuki",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785744339215,
+      "tag": "0002_dusty_the_order",
+      "breakpoints": true
     }
   ]
 }

@@ -6,6 +6,7 @@ import {
   ExternalLink,
   Monitor,
   RefreshCw,
+  Square,
   Smartphone,
 } from "lucide-react";
 import Link from "next/link";
@@ -27,6 +28,7 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
   const [sending, setSending] = useState(false);
   const [chatPrompt, setChatPrompt] = useState("");
   const [messageError, setMessageError] = useState<string>();
+  const [stopping, setStopping] = useState(false);
   const chatEnd = useRef<HTMLDivElement>(null);
 
   const refreshPreview = useCallback(async () => {
@@ -163,6 +165,19 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
 
   }
 
+  async function stopRun() {
+    if (!state.run || stopping) return;
+    setStopping(true);
+    try {
+      await fetch(
+        `/api/projects/${state.project.id}/runs/${state.run.id}`,
+        { method: "DELETE" },
+      );
+    } finally {
+      setStopping(false);
+    }
+  }
+
   const activity = currentActivity(state);
   const runActive = state.run?.status === "queued" || state.run?.status === "running";
   const agentActive = sending || runActive;
@@ -189,7 +204,18 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
           {agentActive && (
             <div className="agent-activity">
               <span aria-hidden="true" />
-              {sending && !runActive ? "Sending…" : activity}
+              <p>{sending && !runActive ? "Sending…" : activity}</p>
+              {runActive && (
+                <button
+                  type="button"
+                  onClick={() => void stopRun()}
+                  disabled={stopping || state.run?.cancelRequestedAt !== null}
+                  aria-label="Stop agent"
+                >
+                  <Square size={10} fill="currentColor" />
+                  {stopping || state.run?.cancelRequestedAt ? "Stopping" : "Stop"}
+                </button>
+              )}
             </div>
           )}
           {state.run?.status === "failed" && (

@@ -27,6 +27,19 @@ export function createDaytonaTools(
   sandboxes: SandboxRuntime,
   workdir: string,
   resolveSandbox: () => Promise<ProjectSandbox>,
+  lifecycle?: {
+    started: (
+      toolCallId: string,
+      toolName: string,
+      args: unknown,
+    ) => Promise<void>;
+    finished: (
+      toolCallId: string,
+      toolName: string,
+      result: unknown,
+      isError: boolean,
+    ) => Promise<void>;
+  },
 ): ToolDefinition[] {
   let workspacePromise:
     | Promise<{ sandbox: Sandbox; actualWorkdir: string }>
@@ -91,6 +104,47 @@ export function createDaytonaTools(
       exposeSessionEnvironment: false,
     }),
   ];
+
+  if (lifecycle) {
+    type ExecutableTool = {
+      name: string;
+      execute: (
+        toolCallId: string,
+        params: unknown,
+        signal: AbortSignal | undefined,
+        onUpdate: unknown,
+        context: unknown,
+      ) => Promise<unknown>;
+    };
+    for (const tool of tools as unknown as ExecutableTool[]) {
+      const execute = tool.execute.bind(tool);
+      tool.execute = async (toolCallId, params, signal, onUpdate, context) => {
+        await lifecycle.started(toolCallId, tool.name, params);
+        let result: unknown;
+        try {
+          result = await execute(
+            toolCallId,
+            params,
+            signal,
+            onUpdate,
+            context,
+          );
+        } catch (error) {
+          await lifecycle.finished(
+            toolCallId,
+            tool.name,
+            {
+              error: error instanceof Error ? error.message : String(error),
+            },
+            true,
+          );
+          throw error;
+        }
+        await lifecycle.finished(toolCallId, tool.name, result, false);
+        return result;
+      };
+    }
+  }
 
   // Pi's generic ToolDefinition is invariant, while customTools accepts mixed schemas.
   return tools as unknown as ToolDefinition[];

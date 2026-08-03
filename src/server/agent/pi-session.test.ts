@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { openPiSession } from "./pi-session";
+import {
+  openPiSession,
+  piSessionByteSize,
+  rebasePiSession,
+} from "./pi-session";
 
 describe("openPiSession", () => {
   it("serializes and restores the Pi conversation", () => {
@@ -39,5 +43,36 @@ describe("openPiSession", () => {
       content: "Remember coral as the accent color.",
     });
     restored.close();
+  });
+
+  it("rebases compacted history into a smaller standalone session", () => {
+    const session = openPiSession("/workspace/project");
+    for (let index = 0; index < 20; index += 1) {
+      session.manager.appendCustomMessageEntry(
+        "old-turn",
+        `Old context ${index}: ${"x".repeat(2_000)}`,
+        false,
+      );
+    }
+    const firstKeptEntryId = session.manager.appendCustomMessageEntry(
+      "current-turn",
+      "The current site uses coral and must keep the checkout page.",
+      false,
+    );
+    session.manager.appendCompaction(
+      "The user chose coral and the checkout page is complete.",
+      firstKeptEntryId,
+      50_000,
+    );
+
+    const before = piSessionByteSize(session.serialize());
+    rebasePiSession(session.manager);
+    const after = piSessionByteSize(session.serialize());
+    const context = session.manager.buildSessionContext().messages;
+
+    expect(after).toBeLessThan(before / 4);
+    expect(JSON.stringify(context)).toContain("checkout page");
+    expect(JSON.stringify(context)).toContain("Earlier project context");
+    session.close();
   });
 });
