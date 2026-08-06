@@ -1,5 +1,5 @@
-export function projectPreviewProxyPath(projectId: string) {
-  return `/api/projects/${encodeURIComponent(projectId)}/preview/proxy/`;
+export function projectPreviewProxyPath(projectId: string, token: string) {
+  return `/api/projects/${encodeURIComponent(projectId)}/preview/proxy/${encodeURIComponent(token)}/`;
 }
 
 export function rewritePreviewText(
@@ -38,17 +38,21 @@ function rewriteHtml(html: string, proxyPath: string) {
       `${open}${rewriteJavaScript(script, proxyPath)}${close}`,
     );
   const base = `<base href="${escapeAttribute(proxyPath)}">`;
+  const referrerPolicy = '<meta name="referrer" content="no-referrer">';
 
   if (/<base\s/i.test(rewrittenAttributes)) {
-    return rewrittenAttributes.replace(/<base\b[^>]*>/i, base);
+    const withBase = rewrittenAttributes.replace(/<base\b[^>]*>/i, base);
+    return /<meta\b[^>]*name=["']referrer["']/i.test(withBase)
+      ? withBase
+      : withBase.replace(/<head\b[^>]*>/i, (head) => `${head}${referrerPolicy}`);
   }
   if (/<head\b[^>]*>/i.test(rewrittenAttributes)) {
     return rewrittenAttributes.replace(
       /<head\b[^>]*>/i,
-      (head) => `${head}${base}`,
+      (head) => `${head}${base}${referrerPolicy}`,
     );
   }
-  return `${base}${rewrittenAttributes}`;
+  return `${base}${referrerPolicy}${rewrittenAttributes}`;
 }
 
 function rewriteJavaScript(source: string, proxyPath: string) {

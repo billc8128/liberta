@@ -1,6 +1,9 @@
 import { notFound, redirect } from "next/navigation";
 
+import { authEnv } from "@/lib/env/server";
 import { currentSession } from "@/lib/auth/session";
+import { createPreviewAccess } from "@/server/projects/preview-access";
+import { prepareProjectPreview } from "@/server/projects/preview";
 import { getOwnedProject, ProjectAccessError } from "@/server/projects/service";
 
 interface PreviewPageProps {
@@ -19,11 +22,17 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
     if (error instanceof ProjectAccessError) notFound();
     throw error;
   }
+  await prepareProjectPreview(session.user.id, project.id);
+  const token = createPreviewAccess(
+    project.id,
+    session.user.id,
+    authEnv().BETTER_AUTH_SECRET,
+  );
 
   return (
     <main className="standalone-preview">
       <iframe
-        src={`/api/projects/${project.id}/preview/proxy/`}
+        src={`/api/projects/${project.id}/preview/proxy/${encodeURIComponent(token)}/`}
         title={`${project.name} preview`}
         allow="clipboard-read; clipboard-write"
         sandbox="allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-downloads"

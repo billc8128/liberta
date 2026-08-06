@@ -1,4 +1,5 @@
-import { currentSession } from "@/lib/auth/session";
+import { authEnv } from "@/lib/env/server";
+import { verifyPreviewAccess } from "@/server/projects/preview-access";
 import {
   prepareProjectPreview,
   ProjectPreviewNotReadyError,
@@ -11,16 +12,20 @@ import {
 } from "@/server/sandbox/preview-document";
 
 interface PreviewProxyContext {
-  params: Promise<{ projectId: string; path?: string[] }>;
+  params: Promise<{ projectId: string; token: string; path?: string[] }>;
 }
 
 async function proxyPreview(request: Request, context: PreviewProxyContext) {
-  const session = await currentSession();
-  if (!session) return new Response("Unauthorized", { status: 401 });
-
   try {
-    const { projectId, path = [] } = await context.params;
-    const previewUrl = await prepareProjectPreview(session.user.id, projectId);
+    const { projectId, token, path = [] } = await context.params;
+    const access = verifyPreviewAccess(
+      token,
+      projectId,
+      authEnv().BETTER_AUTH_SECRET,
+    );
+    if (!access) return new Response("Preview link expired", { status: 401 });
+
+    const previewUrl = await prepareProjectPreview(access.userId, projectId);
     const target = new URL(
       path.map((segment) => encodeURIComponent(segment)).join("/"),
       previewUrl.endsWith("/") ? previewUrl : `${previewUrl}/`,
@@ -56,7 +61,7 @@ async function proxyPreview(request: Request, context: PreviewProxyContext) {
       const content = rewritePreviewText(
         await upstream.text(),
         contentType,
-        projectPreviewProxyPath(projectId),
+        projectPreviewProxyPath(projectId, token),
       );
       return new Response(request.method === "HEAD" ? null : content, {
         status: upstream.status,

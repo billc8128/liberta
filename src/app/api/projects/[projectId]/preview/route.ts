@@ -1,4 +1,6 @@
 import { currentSession } from "@/lib/auth/session";
+import { authEnv } from "@/lib/env/server";
+import { createPreviewAccess } from "@/server/projects/preview-access";
 import {
   ProjectAccessError,
 } from "@/server/projects/service";
@@ -20,7 +22,13 @@ export async function GET(_request: Request, context: ProjectRouteContext) {
   try {
     const { projectId } = await context.params;
     await prepareProjectPreview(session.user.id, projectId);
-    return Response.json({ ready: true });
+    return Response.json({
+      token: createPreviewAccess(
+        projectId,
+        session.user.id,
+        authEnv().BETTER_AUTH_SECRET,
+      ),
+    });
   } catch (error) {
     if (error instanceof ProjectAccessError) {
       return Response.json({ error: "PROJECT_NOT_FOUND" }, { status: 404 });

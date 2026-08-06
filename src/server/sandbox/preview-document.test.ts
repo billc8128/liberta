@@ -6,7 +6,7 @@ import {
 } from "./preview-document";
 
 describe("preview response rewriting", () => {
-  const proxy = "/api/projects/project-1/preview/proxy/";
+  const proxy = "/api/projects/project-1/preview/proxy/signed-token/";
 
   it("keeps every HTML asset inside the authenticated proxy", () => {
     const html = rewritePreviewText(
@@ -46,8 +46,8 @@ describe("preview response rewriting", () => {
   });
 
   it("builds a stable same-origin proxy path", () => {
-    expect(projectPreviewProxyPath("project id")).toBe(
-      "/api/projects/project%20id/preview/proxy/",
+    expect(projectPreviewProxyPath("project id", "signed token")).toBe(
+      "/api/projects/project%20id/preview/proxy/signed%20token/",
     );
   });
 });

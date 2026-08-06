@@ -13,6 +13,10 @@ const previewUrls = new Map<
 >();
 
 export async function prepareProjectPreview(userId: string, projectId: string) {
+  const cacheKey = `${userId}:${projectId}`;
+  const cached = previewUrls.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.url;
+
   const project = await getOwnedProject(userId, projectId);
   if (
     !project.sandboxId ||
@@ -20,16 +24,6 @@ export async function prepareProjectPreview(userId: string, projectId: string) {
     (project.status !== "ready" && project.status !== "running")
   ) {
     throw new ProjectPreviewNotReadyError();
-  }
-
-  const cacheKey = `${userId}:${projectId}`;
-  const cached = previewUrls.get(cacheKey);
-  if (
-    cached &&
-    cached.sandboxId === project.sandboxId &&
-    cached.expiresAt > Date.now()
-  ) {
-    return cached.url;
   }
 
   const sandboxes = new DaytonaSandboxRuntime();

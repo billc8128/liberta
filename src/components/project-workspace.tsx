@@ -25,7 +25,7 @@ interface ProjectWorkspaceProps {
 export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
   const [state, setState] = useState(initialState);
   const [view, setView] = useState<"desktop" | "mobile">("desktop");
-  const [previewReady, setPreviewReady] = useState(false);
+  const [previewToken, setPreviewToken] = useState<string>();
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string>();
   const [previewVersion, setPreviewVersion] = useState(0);
@@ -58,7 +58,8 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
         }
         return false;
       }
-      setPreviewReady(true);
+      const result = (await response.json()) as { token: string };
+      setPreviewToken(result.token);
       setPreviewVersion((version) => version + 1);
       return true;
     } catch {
@@ -264,7 +265,10 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
   const liveOutput = Object.values(runOutputs)
     .filter((output) => output.runId === state.run?.id)
     .at(-1)?.output;
-  const previewDocumentUrl = `/api/projects/${state.project.id}/preview/proxy/?version=${previewVersion}`;
+  const previewReady = Boolean(previewToken);
+  const previewDocumentUrl = previewToken
+    ? `/api/projects/${state.project.id}/preview/proxy/${encodeURIComponent(previewToken)}/?version=${previewVersion}`
+    : undefined;
 
   return (
     <main className="workspace-shell">
