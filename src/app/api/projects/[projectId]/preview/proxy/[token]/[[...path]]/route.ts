@@ -51,6 +51,10 @@ async function proxyPreview(request: Request, context: PreviewProxyContext) {
     const responseHeaders = new Headers({
       "Content-Type": contentType || "application/octet-stream",
       "Cache-Control": "no-store",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "Content-Type, Range",
+      "Access-Control-Allow-Methods": "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS",
+      "Cross-Origin-Resource-Policy": "cross-origin",
     });
     for (const name of ["accept-ranges", "content-range"]) {
       const value = upstream.headers.get(name);
