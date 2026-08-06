@@ -16,6 +16,7 @@ import { AgentRunProgressCard } from "@/components/agent-run-progress-card";
 import { MarkdownContent } from "@/components/markdown-content";
 import { submitOnEnter } from "@/components/submit-on-enter";
 import { MarketingThemeSwitch } from "@/components/marketing-theme";
+import { creatorFacingResponse } from "@/lib/projects/creator-response";
 import type { ProjectStateDto } from "@/lib/projects/types";
 
 interface ProjectWorkspaceProps {
@@ -292,7 +293,14 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
             (state.run?.status === "failed" && message.id === failedMessage?.id) ? null : (
               <article key={message.id} className={`message ${message.role}`}>
                 {message.role === "assistant" && <span className="agent-spark" aria-hidden="true">✦</span>}
-                <MarkdownContent content={message.content} className="message-markdown" />
+                <MarkdownContent
+                  content={
+                    message.role === "assistant"
+                      ? creatorFacingResponse(message.content, false)
+                      : message.content
+                  }
+                  className="message-markdown"
+                />
               </article>
             ),
           )}

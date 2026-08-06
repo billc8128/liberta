@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, isNull, lt, or, sql } from "drizzle-orm";
 
 import { PiAgentRuntime } from "@/server/agent/pi";
-import { creatorFacingResponse } from "@/server/agent/creator-response";
+import { creatorFacingResponse } from "@/lib/projects/creator-response";
 import {
   parsePiSessionData,
   piSessionByteSize,

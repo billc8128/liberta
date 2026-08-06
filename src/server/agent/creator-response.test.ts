@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { creatorFacingResponse } from "./creator-response";
+import { creatorFacingResponse } from "../../lib/projects/creator-response";
 
 describe("creatorFacingResponse", () => {
   it("removes developer instructions while preserving the visible result", () => {
