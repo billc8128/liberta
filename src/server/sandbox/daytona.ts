@@ -4,7 +4,6 @@ import { Daytona, Image, SandboxState } from "@daytona/sdk";
 
 import { daytonaEnv } from "@/lib/env/server";
 import { previewCommand } from "@/server/sandbox/preview-command";
-import { disableDaytonaPreviewWarning } from "@/server/sandbox/preview-warning";
 import {
   DEFAULT_PREVIEW_PORT,
   PROJECT_DIRECTORY,
@@ -14,8 +13,6 @@ import {
 } from "@/server/sandbox/runtime";
 
 const PREVIEW_SESSION_PREFIX = "project-l-preview-";
-const DAYTONA_DEFAULT_API_URL = "https://app.daytona.io/api";
-const previewWarningConfigured = new Set<string>();
 const PROJECT_SANDBOX_IMAGE = Image.base("node:22-bookworm-slim")
   .runCommands(
     "apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git ripgrep && rm -rf /var/lib/apt/lists/*",
@@ -24,15 +21,11 @@ const PROJECT_SANDBOX_IMAGE = Image.base("node:22-bookworm-slim")
 
 export class DaytonaSandboxRuntime implements SandboxRuntime {
   private readonly client: Daytona;
-  private readonly apiKey: string;
-  private readonly apiUrl: string;
 
   constructor() {
     const env = daytonaEnv();
-    this.apiKey = env.DAYTONA_API_KEY;
-    this.apiUrl = (env.DAYTONA_API_URL ?? DAYTONA_DEFAULT_API_URL).replace(/\/$/, "");
     this.client = new Daytona({
-      apiKey: this.apiKey,
+      apiKey: env.DAYTONA_API_KEY,
       apiUrl: env.DAYTONA_API_URL,
       target: env.DAYTONA_TARGET,
     });
@@ -146,20 +139,8 @@ export class DaytonaSandboxRuntime implements SandboxRuntime {
 
   async previewUrl(sandboxId: string, port = DEFAULT_PREVIEW_PORT) {
     const sandbox = await this.ensureRunning(sandboxId);
-    await this.disablePreviewWarning(sandbox.organizationId);
     const preview = await sandbox.getSignedPreviewUrl(port, 60 * 60);
     return preview.url;
-  }
-
-  private async disablePreviewWarning(organizationId: string) {
-    if (previewWarningConfigured.has(organizationId)) return;
-
-    await disableDaytonaPreviewWarning({
-      apiUrl: this.apiUrl,
-      apiKey: this.apiKey,
-      organizationId,
-    });
-    previewWarningConfigured.add(organizationId);
   }
 }
 

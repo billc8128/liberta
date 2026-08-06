@@ -252,6 +252,7 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
   const liveOutput = Object.values(runOutputs)
     .filter((output) => output.runId === state.run?.id)
     .at(-1)?.output;
+  const previewDocumentUrl = `/api/projects/${state.project.id}/preview/document?version=${previewVersion}`;
 
   return (
     <main className="workspace-shell">
@@ -369,7 +370,14 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
             </button>
             <button
               type="button"
-              onClick={() => previewUrl && window.open(previewUrl, "_blank", "noopener,noreferrer")}
+              onClick={() =>
+                previewUrl &&
+                window.open(
+                  `/projects/${state.project.id}/preview`,
+                  "_blank",
+                  "noopener,noreferrer",
+                )
+              }
               aria-label="Open preview in a new tab"
               disabled={!previewUrl}
             ><ExternalLink size={16} /></button>
@@ -381,9 +389,10 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
             {previewUrl ? (
               <iframe
                 key={previewVersion}
-                src={previewUrl}
+                src={previewDocumentUrl}
                 title={`${state.project.name} preview`}
                 allow="clipboard-read; clipboard-write"
+                sandbox="allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-downloads"
               />
             ) : (
               <div className="preview-empty">

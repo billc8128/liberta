@@ -3280,6 +3280,22 @@ a:focus-visible {
   border: 0;
 }
 
+.standalone-preview,
+.standalone-preview iframe {
+  width: 100%;
+  min-height: 100dvh;
+  border: 0;
+}
+
+.standalone-preview {
+  overflow: hidden;
+  background: #0b0d0c;
+}
+
+.standalone-preview iframe {
+  display: block;
+}
+
 .preview-stage.mobile .preview-canvas {
   width: min(390px, 100%);
 }
