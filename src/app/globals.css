@@ -2704,26 +2704,113 @@ a:focus-visible {
   margin-bottom: 30px;
 }
 
-.message p {
+.message-markdown {
   max-width: 90%;
-  margin: 0;
   color: var(--workspace-copy);
   font-size: 14.5px;
   line-height: 1.7;
   letter-spacing: -0.012em;
-  white-space: pre-wrap;
 }
 
 .message.user {
   justify-content: flex-end;
 }
 
-.message.user p {
+.message.user .message-markdown {
   padding: 12px 15px;
   color: var(--workspace-ink);
   background: #262022;
   border: 1px solid rgba(255, 79, 163, 0.1);
   border-radius: 20px 20px 6px 20px;
+}
+
+.markdown-content > :first-child {
+  margin-top: 0;
+}
+
+.markdown-content > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-content p,
+.markdown-content ul,
+.markdown-content ol,
+.markdown-content blockquote,
+.markdown-content pre,
+.markdown-content table {
+  margin: 0 0 0.9em;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+  padding-left: 1.35em;
+}
+
+.markdown-content li + li {
+  margin-top: 0.22em;
+}
+
+.markdown-content strong {
+  color: var(--workspace-ink);
+  font-weight: 650;
+}
+
+.markdown-content a {
+  color: var(--workspace-accent-two);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+
+.markdown-content code {
+  padding: 0.12em 0.34em;
+  color: var(--workspace-ink);
+  background: rgba(255, 252, 225, 0.07);
+  border: 1px solid var(--workspace-line);
+  border-radius: 5px;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.88em;
+}
+
+.markdown-content pre {
+  max-width: 100%;
+  padding: 11px 13px;
+  overflow-x: auto;
+  color: #c6cfca;
+  background: #0b0d0c;
+  border: 1px solid rgba(255, 252, 225, 0.08);
+  border-radius: 9px;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.84em;
+  line-height: 1.55;
+}
+
+.markdown-content pre code {
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font-size: inherit;
+}
+
+.markdown-content blockquote {
+  padding-left: 0.85em;
+  color: var(--workspace-muted);
+  border-left: 2px solid var(--workspace-line);
+}
+
+.markdown-content table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.markdown-content th,
+.markdown-content td {
+  padding: 0.42em 0.62em;
+  text-align: left;
+  border-bottom: 1px solid var(--workspace-line);
 }
 
 .agent-spark {
@@ -2911,7 +2998,6 @@ a:focus-visible {
   border-top: 1px solid var(--workspace-line);
   font-size: 13px;
   line-height: 1.65;
-  white-space: pre-wrap;
 }
 
 .agent-sending {
@@ -3323,14 +3409,23 @@ a:focus-visible {
   scrollbar-color: #d4dee4 transparent;
 }
 
-.marketing-theme-shell[data-theme="portrait"] .message p {
+.marketing-theme-shell[data-theme="portrait"] .message-markdown {
   color: var(--workspace-copy);
 }
 
-.marketing-theme-shell[data-theme="portrait"] .message.user p {
+.marketing-theme-shell[data-theme="portrait"] .message.user .message-markdown {
   color: var(--workspace-ink);
   background: #e8f1ff;
   border-color: rgba(8, 48, 76, 0.05);
+}
+
+.marketing-theme-shell[data-theme="portrait"] .markdown-content :not(pre) > code {
+  background: #f1f5f7;
+}
+
+.marketing-theme-shell[data-theme="portrait"] .markdown-content pre {
+  color: #d8e4df;
+  background: #10202a;
 }
 
 .marketing-theme-shell[data-theme="portrait"] .agent-spark {

@@ -13,6 +13,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { AgentRunProgressCard } from "@/components/agent-run-progress-card";
+import { MarkdownContent } from "@/components/markdown-content";
 import { submitOnEnter } from "@/components/submit-on-enter";
 import { MarketingThemeSwitch } from "@/components/marketing-theme";
 import type { ProjectStateDto } from "@/lib/projects/types";
@@ -274,7 +275,7 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
             (state.run?.status === "failed" && message.id === failedMessage?.id) ? null : (
               <article key={message.id} className={`message ${message.role}`}>
                 {message.role === "assistant" && <span className="agent-spark" aria-hidden="true">✦</span>}
-                <p>{message.content}</p>
+                <MarkdownContent content={message.content} className="message-markdown" />
               </article>
             ),
           )}

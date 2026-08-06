@@ -5,6 +5,7 @@ import {
   formatRunDuration,
   terminalTail,
 } from "@/components/agent-run-progress";
+import { MarkdownContent } from "@/components/markdown-content";
 import type { ProjectStateDto } from "@/lib/projects/types";
 
 interface AgentRunProgressCardProps {
@@ -80,7 +81,12 @@ export function AgentRunProgressCard({
           </details>
         )}
 
-        {response?.trim() && <p className="agent-streaming-response">{response}</p>}
+        {response?.trim() && (
+          <MarkdownContent
+            content={response}
+            className="agent-streaming-response"
+          />
+        )}
       </div>
     </section>
   );
