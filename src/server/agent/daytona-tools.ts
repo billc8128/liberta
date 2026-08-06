@@ -1,5 +1,6 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 
 import type { Sandbox } from "@daytona/sdk";
@@ -76,22 +77,46 @@ export function createDaytonaTools(
 
       // Never forward the Project L worker environment into a user sandbox.
       const resolved = await workspace();
-      const result = await resolved.sandbox.process.executeCommand(
-        command,
-        mapSandboxPath(cwd, workdir, resolved.actualWorkdir),
-        undefined,
-        Math.min(
-          options.timeout ?? DEFAULT_COMMAND_TIMEOUT_SECONDS,
-          MAX_COMMAND_TIMEOUT_SECONDS,
-        ),
+      const timeoutSeconds = Math.min(
+        options.timeout ?? DEFAULT_COMMAND_TIMEOUT_SECONDS,
+        MAX_COMMAND_TIMEOUT_SECONDS,
       );
+      const actualCwd = mapSandboxPath(cwd, workdir, resolved.actualWorkdir);
+      const sessionId = `project-l-agent-${randomUUID()}`;
+      await resolved.sandbox.process.createSession(sessionId);
+      const execution = await resolved.sandbox.process.executeSessionCommand(
+        sessionId,
+        {
+          command: `cd ${shellQuote(actualCwd)} && timeout --signal=TERM ${timeoutSeconds}s sh -lc ${shellQuote(command)}`,
+          runAsync: true,
+          suppressInputEcho: true,
+        },
+      );
+      const stopCommand = () => {
+        void resolved.sandbox.process.deleteSession(sessionId).catch(() => {});
+      };
+      options.signal?.addEventListener("abort", stopCommand, { once: true });
 
-      if (options.signal?.aborted) {
-        throw new Error("Command aborted.");
+      try {
+        await resolved.sandbox.process.getSessionCommandLogs(
+          sessionId,
+          execution.cmdId,
+          (chunk) => options.onData(Buffer.from(chunk)),
+          (chunk) => options.onData(Buffer.from(chunk)),
+        );
+        if (options.signal?.aborted) throw new Error("Command aborted.");
+        const result = await resolved.sandbox.process.getSessionCommand(
+          sessionId,
+          execution.cmdId,
+        );
+        return { exitCode: result.exitCode ?? 1 };
+      } catch (error) {
+        if (options.signal?.aborted) throw new Error("Command aborted.");
+        throw error;
+      } finally {
+        options.signal?.removeEventListener("abort", stopCommand);
+        await resolved.sandbox.process.deleteSession(sessionId).catch(() => {});
       }
-
-      options.onData(Buffer.from(result.result));
-      return { exitCode: result.exitCode };
     },
   };
 

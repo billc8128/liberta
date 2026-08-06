@@ -70,7 +70,13 @@ export async function GET(request: Request, context: ProjectRouteContext) {
           const data =
             update.type === "message_delta"
               ? { messageId: update.messageId, delta: update.delta }
-              : { messageId: update.messageId, content: update.content };
+              : update.type === "message_replace"
+                ? { messageId: update.messageId, content: update.content }
+                : {
+                    runId: update.runId,
+                    toolCallId: update.toolCallId,
+                    output: update.output,
+                  };
           controller.enqueue(
             encoder.encode(
               `event: ${update.type}\ndata: ${JSON.stringify(data)}\n\n`,

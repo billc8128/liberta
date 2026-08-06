@@ -12,6 +12,7 @@ import {
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
+import { AgentRunProgressCard } from "@/components/agent-run-progress-card";
 import { submitOnEnter } from "@/components/submit-on-enter";
 import { MarketingThemeSwitch } from "@/components/marketing-theme";
 import type { ProjectStateDto } from "@/lib/projects/types";
@@ -29,16 +30,31 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
   const [chatPrompt, setChatPrompt] = useState("");
   const [messageError, setMessageError] = useState<string>();
   const [stopping, setStopping] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  const [runOutputs, setRunOutputs] = useState<
+    Record<string, { runId: string; output: string }>
+  >({});
   const chatEnd = useRef<HTMLDivElement>(null);
+  const conversationScroll = useRef<HTMLDivElement>(null);
+  const stayAtBottom = useRef(true);
+  const previewRefreshing = useRef(false);
+  const runActive = state.run?.status === "queued" || state.run?.status === "running";
 
   const refreshPreview = useCallback(async () => {
-    const response = await fetch(`/api/projects/${state.project.id}/preview`, {
-      cache: "no-store",
-    });
-    if (!response.ok) return;
-    const result = (await response.json()) as { url: string };
-    setPreviewUrl(result.url);
-    setPreviewVersion((version) => version + 1);
+    if (previewRefreshing.current) return false;
+    previewRefreshing.current = true;
+    try {
+      const response = await fetch(`/api/projects/${state.project.id}/preview`, {
+        cache: "no-store",
+      });
+      if (!response.ok) return false;
+      const result = (await response.json()) as { url: string };
+      setPreviewUrl(result.url);
+      setPreviewVersion((version) => version + 1);
+      return true;
+    } finally {
+      previewRefreshing.current = false;
+    }
   }, [state.project.id]);
 
   useEffect(() => {
@@ -74,21 +90,71 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
         ),
       }));
     };
+    const updateRunOutput = (event: MessageEvent<string>) => {
+      const update = JSON.parse(event.data) as {
+        runId: string;
+        toolCallId: string;
+        output: string;
+      };
+      setRunOutputs((current) => ({
+        ...current,
+        [update.toolCallId]: { runId: update.runId, output: update.output },
+      }));
+    };
     events.addEventListener("state", updateState as EventListener);
     events.addEventListener("message_delta", appendMessage as EventListener);
     events.addEventListener("message_replace", replaceMessage as EventListener);
+    events.addEventListener("run_output", updateRunOutput as EventListener);
     return () => events.close();
   }, [state.project.id]);
 
   useEffect(() => {
-    if (state.project.status !== "ready") return;
-    const timer = window.setTimeout(() => void refreshPreview(), 0);
-    return () => window.clearTimeout(timer);
+    if (state.run?.status !== "queued") return;
+    const refreshQueue = async () => {
+      const response = await fetch(`/api/projects/${state.project.id}`, {
+        cache: "no-store",
+      });
+      if (response.ok) setState((await response.json()) as ProjectStateDto);
+    };
+    const timer = window.setInterval(() => void refreshQueue(), 4_000);
+    return () => window.clearInterval(timer);
+  }, [state.project.id, state.run?.status]);
+
+  useEffect(() => {
+    if (state.project.status !== "ready" && state.project.status !== "running") {
+      return;
+    }
+    let cancelled = false;
+    let timer: number | undefined;
+    const poll = async () => {
+      await refreshPreview();
+      if (!cancelled && state.project.status === "running") {
+        timer = window.setTimeout(() => void poll(), 4_000);
+      }
+    };
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
   }, [refreshPreview, state.project.status, state.project.updatedAt]);
 
   useEffect(() => {
-    chatEnd.current?.scrollIntoView({ behavior: "smooth" });
+    if (!runActive) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [runActive]);
+
+  useEffect(() => {
+    if (stayAtBottom.current) chatEnd.current?.scrollIntoView({ behavior: "auto" });
   }, [state.messages, state.events.length]);
+
+  const handleConversationScroll = () => {
+    const element = conversationScroll.current;
+    if (!element) return;
+    stayAtBottom.current =
+      element.scrollHeight - element.scrollTop - element.clientHeight < 96;
+  };
 
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -175,9 +241,16 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
     }
   }
 
-  const activity = currentActivity(state);
-  const runActive = state.run?.status === "queued" || state.run?.status === "running";
   const agentActive = sending || runActive;
+  const streamingMessage = [...state.messages]
+    .reverse()
+    .find((message) => message.role === "assistant" && message.status === "streaming");
+  const failedMessage = [...state.messages]
+    .reverse()
+    .find((message) => message.role === "assistant" && message.status === "failed");
+  const liveOutput = Object.values(runOutputs)
+    .filter((output) => output.runId === state.run?.id)
+    .at(-1)?.output;
 
   return (
     <main className="workspace-shell">
@@ -191,22 +264,35 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
           <MarketingThemeSwitch />
         </header>
 
-        <div className="conversation-scroll" aria-live="polite">
-          {state.messages.map((message) => (
-            <article key={message.id} className={`message ${message.role}`}>
-              {message.role === "assistant" && <span className="agent-spark" aria-hidden="true">✦</span>}
-              <p>{message.content}</p>
-            </article>
-          ))}
-          {agentActive && (
-            <div className="agent-activity">
-              <span aria-hidden="true" />
-              <p>{sending && !runActive ? "Sending…" : activity}</p>
-            </div>
+        <div
+          className="conversation-scroll"
+          ref={conversationScroll}
+          onScroll={handleConversationScroll}
+        >
+          {state.messages.map((message) =>
+            message.id === streamingMessage?.id ||
+            (state.run?.status === "failed" && message.id === failedMessage?.id) ? null : (
+              <article key={message.id} className={`message ${message.role}`}>
+                {message.role === "assistant" && <span className="agent-spark" aria-hidden="true">✦</span>}
+                <p>{message.content}</p>
+              </article>
+            ),
+          )}
+          {runActive && (
+            <AgentRunProgressCard
+              state={state}
+              now={now}
+              output={liveOutput}
+              response={streamingMessage?.content}
+            />
+          )}
+          {sending && !runActive && (
+            <div className="agent-sending"><span aria-hidden="true" /> Sending…</div>
           )}
           {state.run?.status === "failed" && (
             <p className="run-error" role="alert">
-              The agent stopped before it could finish. You can send another message to retry.
+              <strong>The agent stopped before it could finish.</strong>
+              {state.run.errorMessage?.slice(0, 280) ?? "Send another message to retry."}
             </p>
           )}
           <div ref={chatEnd} />
@@ -224,7 +310,13 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
             onKeyDown={submitOnEnter}
           />
           <div className="composer-footer">
-            <span>{runActive ? "Send another message — it will run next" : "Enter to send · Shift + Enter for a new line"}</span>
+            <span>
+              {runActive
+                ? state.queue?.followUps
+                  ? `${state.queue.followUps} follow-up${state.queue.followUps === 1 ? "" : "s"} queued`
+                  : "Send another message — it will run next"
+                : "Enter to send · Shift + Enter for a new line"}
+            </span>
             <div className="composer-actions">
               {runActive && (
                 <button
@@ -270,7 +362,7 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
             <button
               onClick={() => void refreshPreview()}
               aria-label="Refresh preview"
-              disabled={state.project.status !== "ready"}
+              disabled={state.project.status !== "ready" && state.project.status !== "running"}
             >
               <RefreshCw size={16} />
             </button>
@@ -305,19 +397,9 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
   );
 }
 
-function currentActivity(state: ProjectStateDto) {
-  if (state.run?.status === "queued") return "Preparing the project space…";
-  const event = state.events.at(-1);
-  const tool = typeof event?.payload.toolName === "string" ? event.payload.toolName : undefined;
-  if (tool === "read") return "Reading the project…";
-  if (tool === "write" || tool === "edit") return "Editing the site…";
-  if (tool === "bash") return "Running the project…";
-  return "Working through your request…";
-}
-
 function previewStatus(state: ProjectStateDto) {
   if (state.project.status === "failed") return "The preview is unavailable until the agent recovers.";
-  if (state.run?.status === "queued") return "The workspace is being prepared.";
-  if (state.run?.status === "running") return "Your site will appear here as soon as it runs.";
+  if (state.run?.status === "queued") return "Waiting for an available agent.";
+  if (state.run?.status === "running") return "Building the first runnable preview…";
   return "Start a conversation to build the site.";
 }

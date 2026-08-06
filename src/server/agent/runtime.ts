@@ -3,12 +3,30 @@ import type { ProjectSandbox } from "@/server/sandbox/runtime";
 export type AgentRuntimeEvent =
   | { type: "text_delta"; text: string }
   | { type: "text_retract"; characters: number }
-  | { type: "tool_started"; toolCallId: string; toolName: string }
+  | {
+      type: "tool_started";
+      toolCallId: string;
+      toolName: string;
+      args: unknown;
+    }
+  | {
+      type: "tool_output";
+      toolCallId: string;
+      toolName: string;
+      output: string;
+    }
   | {
       type: "tool_finished";
       toolCallId: string;
       toolName: string;
       isError: boolean;
+    }
+  | {
+      type: "progress";
+      id: string;
+      label: string;
+      status: "started" | "completed" | "failed";
+      detail?: string;
     };
 
 export interface AgentTurnInput {

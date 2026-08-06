@@ -27,9 +27,12 @@ export function toProjectStateDto(state: ProjectState): ProjectStateDto {
           status: state.run.status,
           errorMessage: state.run.errorMessage,
           cancelRequestedAt: state.run.cancelRequestedAt?.toISOString() ?? null,
+          startedAt: state.run.startedAt?.toISOString() ?? null,
+          completedAt: state.run.completedAt?.toISOString() ?? null,
           createdAt: state.run.createdAt.toISOString(),
         }
       : null,
+    queue: state.queue,
     events: state.events.map((event) => ({
       id: event.id,
       sequence: event.sequence,

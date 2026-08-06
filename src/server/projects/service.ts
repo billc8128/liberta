@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { arkEnv } from "@/lib/env/server";
@@ -191,7 +191,7 @@ export async function getProjectState(ownerId: string, projectId: string) {
     .from(messages)
     .where(eq(messages.projectId, projectId))
     .orderBy(asc(messages.createdAt));
-  const [activeRun] = await db
+  const activeRuns = await db
     .select()
     .from(agentRuns)
     .where(
@@ -203,8 +203,8 @@ export async function getProjectState(ownerId: string, projectId: string) {
     .orderBy(
       sql`case when ${agentRuns.status} = 'running' then 0 else 1 end`,
       asc(agentRuns.createdAt),
-    )
-    .limit(1);
+    );
+  const activeRun = activeRuns[0];
   const latestRun = activeRun
     ? undefined
     : (
@@ -216,6 +216,28 @@ export async function getProjectState(ownerId: string, projectId: string) {
           .limit(1)
       )[0];
   const run = activeRun ?? latestRun;
+  const queuedRuns = activeRuns.filter(
+    (candidate) => candidate.status === "queued",
+  );
+  let queue: { ahead: number; followUps: number } | null = null;
+  if (activeRun?.status === "queued") {
+    const [position] = await db
+      .select({ value: count() })
+      .from(agentRuns)
+      .where(
+        and(
+          eq(agentRuns.status, "queued"),
+          isNull(agentRuns.cancelRequestedAt),
+          lt(agentRuns.createdAt, activeRun.createdAt),
+        ),
+      );
+    queue = {
+      ahead: Number(position.value),
+      followUps: Math.max(0, queuedRuns.length - 1),
+    };
+  } else if (activeRun?.status === "running") {
+    queue = { ahead: 0, followUps: queuedRuns.length };
+  }
   const events = run
     ? await db
         .select()
@@ -224,7 +246,7 @@ export async function getProjectState(ownerId: string, projectId: string) {
         .orderBy(asc(agentRunEvents.sequence))
     : [];
 
-  return { project, messages: conversation, run: run ?? null, events };
+  return { project, messages: conversation, run: run ?? null, queue, events };
 }
 
 export async function getOwnedProject(ownerId: string, projectId: string) {

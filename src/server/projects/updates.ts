@@ -17,6 +17,13 @@ export type ProjectUpdate =
       projectId: string;
       messageId: string;
       content: string;
+    }
+  | {
+      type: "run_output";
+      projectId: string;
+      runId: string;
+      toolCallId: string;
+      output: string;
     };
 
 type ProjectUpdateHandler = (update: ProjectUpdate) => void;
@@ -42,6 +49,21 @@ export async function publishProjectMessageReplacement(
   content: string,
 ) {
   await publish({ type: "message_replace", projectId, messageId, content });
+}
+
+export async function publishProjectRunOutput(
+  projectId: string,
+  runId: string,
+  toolCallId: string,
+  output: string,
+) {
+  await publish({
+    type: "run_output",
+    projectId,
+    runId,
+    toolCallId,
+    output: output.slice(-4_000),
+  });
 }
 
 async function publish(update: ProjectUpdate) {

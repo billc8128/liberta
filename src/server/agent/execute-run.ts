@@ -29,6 +29,7 @@ import { promptWithConversation } from "@/server/projects/prompt";
 import {
   publishProjectMessageDelta,
   publishProjectMessageReplacement,
+  publishProjectRunOutput,
   publishProjectUpdate,
 } from "@/server/projects/updates";
 import { DaytonaSandboxRuntime } from "@/server/sandbox/daytona";
@@ -87,6 +88,11 @@ export async function executeAgentRun(
     .where(eq(agentRuns.id, runId))
     .limit(1);
   if (!record) throw new Error(`Agent run ${runId} does not exist.`);
+  console.info("Agent run started", {
+    runId,
+    projectId: record.project.id,
+    queuedMs: now.getTime() - record.run.createdAt.getTime(),
+  });
 
   const controller = new AbortController();
   const abortForShutdown = () =>
@@ -187,23 +193,49 @@ export async function executeAgentRun(
     const sandboxes = new DaytonaSandboxRuntime();
     let project = record.project;
     let sandboxPromise: Promise<{ id: string; workdir: string }> | undefined;
+    let reportEvent: (event: AgentRuntimeEvent) => Promise<void> = () =>
+      Promise.resolve();
     const resolveSandbox = async () => {
       if (project.sandboxId && project.sandboxWorkdir) {
         return { id: project.sandboxId, workdir: project.sandboxWorkdir };
       }
       sandboxPromise ??= (async () => {
-        const sandbox = await sandboxes.create(project.id);
-        const [updated] = await db
-          .update(projects)
-          .set({
-            sandboxId: sandbox.id,
-            sandboxWorkdir: sandbox.workdir,
-            updatedAt: new Date(),
-          })
-          .where(eq(projects.id, project.id))
-          .returning();
-        project = updated;
-        return sandbox;
+        const startedAt = Date.now();
+        await reportEvent({
+          type: "progress",
+          id: "workspace",
+          label: "Preparing the workspace",
+          status: "started",
+        });
+        try {
+          const sandbox = await sandboxes.create(project.id);
+          const [updated] = await db
+            .update(projects)
+            .set({
+              sandboxId: sandbox.id,
+              sandboxWorkdir: sandbox.workdir,
+              updatedAt: new Date(),
+            })
+            .where(eq(projects.id, project.id))
+            .returning();
+          project = updated;
+          await reportEvent({
+            type: "progress",
+            id: "workspace",
+            label: "Preparing the workspace",
+            status: "completed",
+            detail: `${Math.max(1, Math.round((Date.now() - startedAt) / 1_000))}s`,
+          });
+          return sandbox;
+        } catch (error) {
+          await reportEvent({
+            type: "progress",
+            id: "workspace",
+            label: "Preparing the workspace",
+            status: "failed",
+          });
+          throw error;
+        }
       })();
       return sandboxPromise;
     };
@@ -457,8 +489,17 @@ export async function executeAgentRun(
       await flushPipeline;
       await flushDelta();
     };
+    let firstOutputRecorded = false;
     const recordEvent = async (event: AgentRuntimeEvent) => {
       if (event.type === "text_delta") {
+        if (!firstOutputRecorded) {
+          firstOutputRecorded = true;
+          console.info("Agent run produced first output", {
+            runId,
+            projectId: project.id,
+            elapsedMs: Date.now() - now.getTime(),
+          });
+        }
         response += event.text;
         pendingDelta += event.text;
         scheduleFlush();
@@ -478,6 +519,23 @@ export async function executeAgentRun(
         );
         return;
       }
+      if (event.type === "tool_output") {
+        await publishProjectRunOutput(
+          project.id,
+          runId,
+          event.toolCallId,
+          event.output,
+        );
+        return;
+      }
+      if (event.type === "tool_started" && !firstOutputRecorded) {
+        firstOutputRecorded = true;
+        console.info("Agent run produced first output", {
+          runId,
+          projectId: project.id,
+          elapsedMs: Date.now() - now.getTime(),
+        });
+      }
       await finishFlush();
       sequence += 1;
       await db.insert(agentRunEvents).values({
@@ -488,8 +546,22 @@ export async function executeAgentRun(
       });
       await publishProjectUpdate(project.id);
     };
+    let runtimeEventPipeline = Promise.resolve();
+    reportEvent = (event) => {
+      const recorded = runtimeEventPipeline.then(() => recordEvent(event));
+      runtimeEventPipeline = recorded;
+      return recorded;
+    };
 
+    const warmSandbox = project.sandboxId ? undefined : resolveSandbox();
+    void warmSandbox?.catch(() => {});
     const agent = new PiAgentRuntime(sandboxes);
+    await reportEvent({
+      type: "progress",
+      id: "brief",
+      label: "Understanding the request",
+      status: "completed",
+    });
     await agent.runTurn(
       {
         workdir: project.sandboxWorkdir ?? UNPROVISIONED_WORKDIR,
@@ -508,11 +580,18 @@ export async function executeAgentRun(
         resolveSandbox,
         onCheckpoint: checkpoint,
       },
-      recordEvent,
+      reportEvent,
     );
     await finishFlush();
     controller.signal.throwIfAborted();
+    await warmSandbox;
 
+    await reportEvent({
+      type: "progress",
+      id: "check",
+      label: "Checking the project",
+      status: "started",
+    });
     let hasRunnableWebsite = false;
     if (project.sandboxId && project.sandboxWorkdir) {
       const projectCheck = await sandboxes.execute(
@@ -523,9 +602,38 @@ export async function executeAgentRun(
       );
       hasRunnableWebsite = projectCheck.exitCode === 0;
     }
+    await reportEvent({
+      type: "progress",
+      id: "check",
+      label: "Checking the project",
+      status: "completed",
+      detail: hasRunnableWebsite ? "Runnable" : "No preview yet",
+    });
     if (!response.trim()) throw new Error("The agent finished without replying.");
     if (hasRunnableWebsite && project.sandboxId && project.sandboxWorkdir) {
-      await sandboxes.startPreview(project.sandboxId, project.sandboxWorkdir);
+      await reportEvent({
+        type: "progress",
+        id: "preview",
+        label: "Starting the preview",
+        status: "started",
+      });
+      try {
+        await sandboxes.startPreview(project.sandboxId, project.sandboxWorkdir);
+        await reportEvent({
+          type: "progress",
+          id: "preview",
+          label: "Starting the preview",
+          status: "completed",
+        });
+      } catch (error) {
+        await reportEvent({
+          type: "progress",
+          id: "preview",
+          label: "Starting the preview",
+          status: "failed",
+        });
+        throw error;
+      }
     }
 
     await db.transaction(async (transaction) => {
@@ -570,6 +678,11 @@ export async function executeAgentRun(
         .where(eq(projects.id, project.id));
     });
     await publishProjectUpdate(project.id);
+    console.info("Agent run completed", {
+      runId,
+      projectId: project.id,
+      durationMs: Date.now() - now.getTime(),
+    });
   } catch (error) {
     if (workerSignal?.aborted || error instanceof RunLeaseLostError) return;
     const [current] = await db
@@ -640,6 +753,14 @@ export async function executeAgentRun(
         .where(eq(projects.id, record.project.id));
     });
     await publishProjectUpdate(record.project.id);
+    console.info(cancelled ? "Agent run cancelled" : "Agent run failed", {
+      runId,
+      projectId: record.project.id,
+      durationMs: Date.now() - now.getTime(),
+      ...(cancelled
+        ? {}
+        : { message: error instanceof Error ? error.message : String(error) }),
+    });
     if (!cancelled) throw error;
   } finally {
     clearInterval(heartbeatTimer);

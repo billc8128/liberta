@@ -73,11 +73,30 @@ export class PiAgentRuntime implements AgentRuntime {
 
     let eventPipeline = Promise.resolve();
     let checkpointPipeline = Promise.resolve();
+    let pendingToolOutput:
+      | Extract<AgentRuntimeEvent, { type: "tool_output" }>
+      | undefined;
+    let toolOutputTimer: ReturnType<typeof setTimeout> | undefined;
     let assistantTextLength = 0;
     let assistantEmittedText = false;
     let modelError: string | undefined;
     const emit = (event: AgentRuntimeEvent) => {
       eventPipeline = eventPipeline.then(() => onEvent(event));
+    };
+    const flushToolOutput = () => {
+      if (!pendingToolOutput) return;
+      emit(pendingToolOutput);
+      pendingToolOutput = undefined;
+    };
+    const scheduleToolOutput = (
+      event: Extract<AgentRuntimeEvent, { type: "tool_output" }>,
+    ) => {
+      pendingToolOutput = event;
+      if (toolOutputTimer) return;
+      toolOutputTimer = setTimeout(() => {
+        toolOutputTimer = undefined;
+        flushToolOutput();
+      }, 160);
     };
     const persistCheckpoint = (entry: Parameters<typeof input.onCheckpoint>[0]) => {
       checkpointPipeline = checkpointPipeline.then(() =>
@@ -207,10 +226,23 @@ export class PiAgentRuntime implements AgentRuntime {
             type: "tool_started",
             toolCallId: event.toolCallId,
             toolName: event.toolName,
+            args: progressToolArgs(event.toolName, event.args),
+          });
+        }
+
+        if (event.type === "tool_execution_update") {
+          scheduleToolOutput({
+            type: "tool_output",
+            toolCallId: event.toolCallId,
+            toolName: event.toolName,
+            output: toolResultText(event.partialResult).slice(-4_000),
           });
         }
 
         if (event.type === "tool_execution_end") {
+          if (toolOutputTimer) clearTimeout(toolOutputTimer);
+          toolOutputTimer = undefined;
+          flushToolOutput();
           emit({
             type: "tool_finished",
             toolCallId: event.toolCallId,
@@ -242,6 +274,9 @@ export class PiAgentRuntime implements AgentRuntime {
         });
       }
       if (!settled) await waitForSettlement(settledPromise, input.signal);
+      if (toolOutputTimer) clearTimeout(toolOutputTimer);
+      toolOutputTimer = undefined;
+      flushToolOutput();
       await Promise.all([eventPipeline, checkpointPipeline]);
       input.signal.throwIfAborted();
       if (modelError) {
@@ -268,6 +303,7 @@ export class PiAgentRuntime implements AgentRuntime {
       await persistCheckpoint({ type: "snapshot", sessionData, rebased });
       return { sessionData, rebased };
     } finally {
+      if (toolOutputTimer) clearTimeout(toolOutputTimer);
       unsubscribe();
       input.signal.removeEventListener("abort", abortSession);
       await Promise.allSettled([eventPipeline, checkpointPipeline]);
@@ -275,6 +311,30 @@ export class PiAgentRuntime implements AgentRuntime {
       persistedSession.close();
     }
   }
+}
+
+function progressToolArgs(toolName: string, args: unknown) {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return {};
+  const values = args as Record<string, unknown>;
+  if (toolName === "bash") {
+    return { command: typeof values.command === "string" ? values.command : "" };
+  }
+  if (toolName === "read" || toolName === "write" || toolName === "edit") {
+    return { path: typeof values.path === "string" ? values.path : "" };
+  }
+  return {};
+}
+
+function toolResultText(result: unknown) {
+  if (!result || typeof result !== "object" || !("content" in result)) return "";
+  const content = (result as { content?: unknown }).content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((item) => {
+      if (!item || typeof item !== "object" || !("text" in item)) return "";
+      return typeof item.text === "string" ? item.text : "";
+    })
+    .join("");
 }
 
 async function waitForSettlement(settled: Promise<void>, signal: AbortSignal) {
