@@ -7,6 +7,7 @@ import {
 import { ProjectAccessError } from "@/server/projects/service";
 import {
   isRewritablePreviewContent,
+  previewUpstreamUrl,
   projectPreviewProxyPath,
   rewritePreviewText,
 } from "@/server/sandbox/preview-document";
@@ -26,11 +27,11 @@ async function proxyPreview(request: Request, context: PreviewProxyContext) {
     if (!access) return new Response("Preview link expired", { status: 401 });
 
     const previewUrl = await prepareProjectPreview(access.userId, projectId);
-    const target = new URL(
-      path.map((segment) => encodeURIComponent(segment)).join("/"),
-      previewUrl.endsWith("/") ? previewUrl : `${previewUrl}/`,
+    const target = previewUpstreamUrl(
+      previewUrl,
+      path,
+      new URL(request.url).search,
     );
-    target.search = new URL(request.url).search;
 
     const headers = new Headers({
       "X-Daytona-Skip-Preview-Warning": "true",

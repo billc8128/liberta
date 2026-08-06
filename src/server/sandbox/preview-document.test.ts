@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   projectPreviewProxyPath,
+  previewUpstreamUrl,
   rewritePreviewText,
 } from "./preview-document";
 
@@ -49,5 +50,15 @@ describe("preview response rewriting", () => {
     expect(projectPreviewProxyPath("project id", "signed token")).toBe(
       "/api/projects/project%20id/preview/proxy/signed%20token/",
     );
+  });
+
+  it("preserves Vite's special module paths upstream", () => {
+    expect(
+      previewUpstreamUrl(
+        "https://3000-token.daytonaproxy.net/",
+        ["@vite", "client"],
+        "?v=1",
+      ).toString(),
+    ).toBe("https://3000-token.daytonaproxy.net/@vite/client?v=1");
   });
 });

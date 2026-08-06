@@ -2,6 +2,19 @@ export function projectPreviewProxyPath(projectId: string, token: string) {
   return `/api/projects/${encodeURIComponent(projectId)}/preview/proxy/${encodeURIComponent(token)}/`;
 }
 
+export function previewUpstreamUrl(
+  previewUrl: string,
+  path: string[],
+  search: string,
+) {
+  const target = new URL(
+    path.join("/"),
+    previewUrl.endsWith("/") ? previewUrl : `${previewUrl}/`,
+  );
+  target.search = search;
+  return target;
+}
+
 export function rewritePreviewText(
   content: string,
   contentType: string,
