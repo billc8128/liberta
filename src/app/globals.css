@@ -2600,7 +2600,7 @@ a:focus-visible {
   --workspace-accent-two: #ff8709;
   color: var(--workspace-ink);
   background: var(--workspace-bg);
-  grid-template-columns: minmax(380px, 35%) 1fr;
+  grid-template-columns: minmax(420px, 41%) 1fr;
 }
 
 .conversation-panel {
@@ -2618,13 +2618,12 @@ a:focus-visible {
 .workspace-project-header {
   position: relative;
   display: grid;
-  gap: 14px;
-  min-height: 78px;
-  padding: 14px 18px;
-  background: rgba(14, 16, 15, 0.88);
-  border-bottom: 1px solid var(--workspace-line);
+  gap: 12px;
+  min-height: 64px;
+  padding: 10px 16px;
+  background: var(--workspace-panel);
+  border-bottom: 1px solid rgba(255, 252, 225, 0.08);
   grid-template-columns: auto minmax(0, 1fr) auto;
-  backdrop-filter: blur(18px);
 }
 
 .workspace-project-meta {
@@ -2634,24 +2633,17 @@ a:focus-visible {
 }
 
 .workspace-project-header::after {
-  position: absolute;
-  right: 18px;
-  bottom: -1px;
-  left: 18px;
-  height: 1px;
-  content: "";
-  pointer-events: none;
-  background: linear-gradient(90deg, transparent, rgba(255, 79, 163, 0.75), rgba(255, 135, 9, 0.45), transparent);
+  display: none;
 }
 
 .workspace-project-header > a {
   display: grid;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   color: var(--workspace-muted);
-  background: rgba(255, 252, 225, 0.025);
-  border: 1px solid var(--workspace-line);
-  border-radius: 14px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
   text-decoration: none;
   place-items: center;
   transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
@@ -2659,8 +2651,8 @@ a:focus-visible {
 
 .workspace-project-header > a:hover {
   color: var(--workspace-ink);
-  background: rgba(255, 79, 163, 0.08);
-  border-color: rgba(255, 79, 163, 0.38);
+  background: rgba(255, 252, 225, 0.05);
+  border-color: var(--workspace-line);
 }
 
 .workspace-project-header strong {
@@ -2682,10 +2674,11 @@ a:focus-visible {
 }
 
 .workspace-shell .marketing-theme-switch {
-  min-height: 34px;
+  min-height: 30px;
+  padding: 0 7px 0 4px;
   color: var(--workspace-muted);
-  background: rgba(255, 252, 225, 0.025);
-  border-color: var(--workspace-line);
+  background: transparent;
+  border-color: transparent;
 }
 
 .workspace-shell .theme-switch-track {
@@ -2759,24 +2752,6 @@ a:focus-visible {
   margin: 0;
 }
 
-.agent-activity button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-left: auto;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-  opacity: 0.72;
-}
-
-.agent-activity button:disabled {
-  cursor: default;
-  opacity: 0.4;
-}
-
 .agent-activity span {
   width: 6px;
   height: 6px;
@@ -2800,10 +2775,10 @@ a:focus-visible {
 .chat-composer {
   position: relative;
   margin: 0 18px 18px;
-  padding: 9px 58px 9px 9px;
+  padding: 9px;
   background: rgba(20, 22, 21, 0.96);
   border: 1px solid var(--workspace-line);
-  border-radius: 24px;
+  border-radius: 22px;
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.24);
 }
 
@@ -2814,8 +2789,8 @@ a:focus-visible {
 
 .chat-composer textarea {
   width: 100%;
-  min-height: 56px;
-  padding: 10px;
+  min-height: 54px;
+  padding: 9px 10px 5px;
   resize: none;
   color: var(--workspace-ink);
   background: transparent;
@@ -2829,10 +2804,62 @@ a:focus-visible {
   color: var(--workspace-muted);
 }
 
-.chat-composer > button {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
+.composer-footer,
+.composer-actions {
+  display: flex;
+  align-items: center;
+}
+
+.composer-footer {
+  min-height: 38px;
+  padding-left: 10px;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.composer-footer > span {
+  overflow: hidden;
+  color: var(--workspace-muted);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 8.5px;
+  letter-spacing: 0.015em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-actions {
+  flex: 0 0 auto;
+  gap: 7px;
+}
+
+.composer-cancel {
+  display: inline-flex;
+  min-height: 34px;
+  padding: 0 12px;
+  align-items: center;
+  gap: 7px;
+  color: #ffb3a4;
+  cursor: pointer;
+  background: rgba(255, 120, 94, 0.08);
+  border: 1px solid rgba(255, 157, 136, 0.2);
+  border-radius: 999px;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 9px;
+  transition: color 160ms ease, background 160ms ease, border-color 160ms ease;
+}
+
+.composer-cancel:hover:not(:disabled) {
+  color: #ffd3ca;
+  background: rgba(255, 120, 94, 0.14);
+  border-color: rgba(255, 157, 136, 0.36);
+}
+
+.composer-cancel:disabled {
+  cursor: default;
+  opacity: 0.46;
+}
+
+.composer-send {
   display: grid;
   width: 38px;
   height: 38px;
@@ -2845,12 +2872,12 @@ a:focus-visible {
   transition: transform 160ms ease, background 160ms ease;
 }
 
-.chat-composer > button:hover:not(:disabled) {
+.composer-send:hover:not(:disabled) {
   background: #ff76b7;
   transform: translateY(-1px);
 }
 
-.chat-composer > button:disabled {
+.composer-send:disabled {
   color: #766a70;
   cursor: not-allowed;
   background: #2c2729;
@@ -2869,18 +2896,17 @@ a:focus-visible {
   display: grid;
   min-width: 0;
   height: 100svh;
-  background: var(--workspace-stage);
-  grid-template-rows: 78px 1fr;
+  background: #0b0d0c;
+  grid-template-rows: 64px 1fr;
 }
 
 .preview-toolbar {
   display: grid;
   align-items: center;
-  padding: 0 20px;
-  background: rgba(14, 16, 15, 0.9);
-  border-bottom: 1px solid var(--workspace-line);
+  padding: 0 16px;
+  background: var(--workspace-panel);
+  border-bottom: 1px solid rgba(255, 252, 225, 0.08);
   grid-template-columns: 1fr auto 1fr;
-  backdrop-filter: blur(18px);
 }
 
 .preview-label {
@@ -2905,9 +2931,9 @@ a:focus-visible {
 .device-switcher {
   display: flex;
   gap: 2px;
-  padding: 5px;
-  background: rgba(255, 252, 225, 0.035);
-  border: 1px solid var(--workspace-line);
+  padding: 3px;
+  background: transparent;
+  border: 0;
   border-radius: 999px;
 }
 
@@ -2928,8 +2954,8 @@ a:focus-visible {
 
 .device-switcher button.active {
   color: var(--workspace-ink);
-  background: rgba(255, 252, 225, 0.1);
-  box-shadow: inset 0 0 0 1px rgba(255, 252, 225, 0.05);
+  background: rgba(255, 252, 225, 0.075);
+  box-shadow: inset 0 0 0 1px rgba(255, 252, 225, 0.04);
 }
 
 .preview-actions {
@@ -2954,7 +2980,7 @@ a:focus-visible {
   display: grid;
   min-width: 0;
   min-height: 0;
-  padding: 22px;
+  padding: 16px;
   overflow: auto;
   background:
     radial-gradient(circle at 84% 12%, rgba(255, 79, 163, 0.11), transparent 28%),
@@ -2966,25 +2992,42 @@ a:focus-visible {
   place-items: center;
 }
 
-.preview-stage iframe {
+.preview-canvas {
+  position: relative;
   width: 100%;
   height: 100%;
-  background: white;
-  border: 1px solid rgba(255, 252, 225, 0.16);
-  border-radius: 22px;
-  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.5);
+  min-height: 0;
+  overflow: hidden;
+  background: #121513;
+  border: 1px solid rgba(255, 252, 225, 0.15);
+  border-radius: 18px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.035) inset,
+    0 24px 70px rgba(0, 0, 0, 0.44),
+    0 3px 12px rgba(0, 0, 0, 0.32);
   transition: width 240ms ease;
 }
 
-.preview-stage.mobile iframe {
+.preview-canvas iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: white;
+  border: 0;
+}
+
+.preview-stage.mobile .preview-canvas {
   width: min(390px, 100%);
 }
 
 .preview-empty {
   display: grid;
+  width: 100%;
+  height: 100%;
   gap: 24px;
   color: var(--workspace-muted);
   text-align: center;
+  place-content: center;
   place-items: center;
 }
 
@@ -3050,7 +3093,7 @@ a:focus-visible {
   --workspace-stage: #edf3f7;
   --workspace-ink: #08304c;
   --workspace-copy: #36576a;
-  --workspace-muted: #6c7d88;
+  --workspace-muted: #596e7b;
   --workspace-line: rgba(8, 48, 76, 0.12);
   --workspace-accent: #08304c;
   --workspace-accent-two: #26c0ff;
@@ -3065,36 +3108,31 @@ a:focus-visible {
 }
 
 .marketing-theme-shell[data-theme="portrait"] .workspace-project-header {
-  background: rgba(255, 255, 255, 0.9);
-  border-color: var(--workspace-line);
-}
-
-.marketing-theme-shell[data-theme="portrait"] .workspace-project-header::after {
-  background: linear-gradient(90deg, transparent, #26c0ff, #e600c2 28%, #ff4940 48%, #ffa130 68%, #00cc3d, transparent);
-  opacity: 0.72;
+  background: #fbfcfd;
+  border-color: rgba(8, 48, 76, 0.07);
 }
 
 .marketing-theme-shell[data-theme="portrait"] .workspace-project-header > a {
   color: #476478;
-  background: #f4f8fb;
-  border-color: var(--workspace-line);
+  background: transparent;
+  border-color: transparent;
 }
 
 .marketing-theme-shell[data-theme="portrait"] .workspace-project-header > a:hover {
   color: var(--workspace-ink);
-  background: #e8f1ff;
-  border-color: rgba(8, 48, 76, 0.2);
+  background: #eef3f6;
+  border-color: rgba(8, 48, 76, 0.09);
 }
 
 .marketing-theme-shell[data-theme="portrait"] .workspace-shell .marketing-theme-switch {
   color: var(--workspace-muted);
-  background: #f7fafc;
-  border-color: var(--workspace-line);
+  background: transparent;
+  border-color: transparent;
 }
 
 .marketing-theme-shell[data-theme="portrait"] .workspace-shell .theme-switch-track {
   justify-content: flex-end;
-  background: #e8f1ff;
+  background: #edf2f5;
 }
 
 .marketing-theme-shell[data-theme="portrait"] .workspace-shell .theme-switch-thumb {
@@ -3149,24 +3187,40 @@ a:focus-visible {
   color: #8797a1;
 }
 
-.marketing-theme-shell[data-theme="portrait"] .chat-composer > button {
+.marketing-theme-shell[data-theme="portrait"] .composer-cancel {
+  color: #7b4a42;
+  background: #fff8f5;
+  border-color: #edd8d1;
+}
+
+.marketing-theme-shell[data-theme="portrait"] .composer-cancel:hover:not(:disabled) {
+  color: #6d3026;
+  background: #fff1ec;
+  border-color: #dfbfb5;
+}
+
+.marketing-theme-shell[data-theme="portrait"] .composer-send {
   color: #ffffff;
   background: var(--workspace-ink);
 }
 
-.marketing-theme-shell[data-theme="portrait"] .chat-composer > button:hover:not(:disabled) {
+.marketing-theme-shell[data-theme="portrait"] .composer-send:hover:not(:disabled) {
   background: #0a4265;
 }
 
-.marketing-theme-shell[data-theme="portrait"] .chat-composer > button:disabled {
+.marketing-theme-shell[data-theme="portrait"] .composer-send:disabled {
   color: #8d9ca5;
   background: #e8eef2;
 }
 
-.marketing-theme-shell[data-theme="portrait"] .preview-panel,
-.marketing-theme-shell[data-theme="portrait"] .preview-toolbar {
-  background: rgba(255, 255, 255, 0.92);
+.marketing-theme-shell[data-theme="portrait"] .preview-panel {
+  background: #eef1f3;
   border-color: var(--workspace-line);
+}
+
+.marketing-theme-shell[data-theme="portrait"] .preview-toolbar {
+  background: #f6f8f9;
+  border-color: rgba(8, 48, 76, 0.07);
 }
 
 .marketing-theme-shell[data-theme="portrait"] .preview-label span {
@@ -3175,8 +3229,8 @@ a:focus-visible {
 }
 
 .marketing-theme-shell[data-theme="portrait"] .device-switcher {
-  background: #f1f6f9;
-  border-color: var(--workspace-line);
+  background: transparent;
+  border-color: transparent;
 }
 
 .marketing-theme-shell[data-theme="portrait"] .device-switcher button.active {
@@ -3193,17 +3247,19 @@ a:focus-visible {
 
 .marketing-theme-shell[data-theme="portrait"] .preview-stage {
   background:
-    radial-gradient(circle at 88% 14%, rgba(255, 235, 214, 0.72), transparent 25%),
-    radial-gradient(circle at 10% 88%, rgba(215, 255, 226, 0.5), transparent 24%),
-    radial-gradient(circle, rgba(8, 48, 76, 0.055) 1px, transparent 1px),
-    var(--workspace-stage);
-  background-size: auto, auto, 22px 22px, auto;
+    radial-gradient(circle at 100% 0, rgba(255, 235, 214, 0.4), transparent 28%),
+    radial-gradient(circle at 0 100%, rgba(215, 255, 226, 0.32), transparent 26%),
+    #edf1f3;
 }
 
-.marketing-theme-shell[data-theme="portrait"] .preview-stage iframe {
-  border-color: rgba(8, 48, 76, 0.12);
-  border-radius: 24px;
-  box-shadow: 0 28px 72px rgba(8, 48, 76, 0.13);
+.marketing-theme-shell[data-theme="portrait"] .preview-canvas {
+  background: #ffffff;
+  border-color: rgba(8, 48, 76, 0.13);
+  border-radius: 19px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.96) inset,
+    0 1px 2px rgba(8, 48, 76, 0.05),
+    0 14px 42px rgba(8, 48, 76, 0.11);
 }
 
 .marketing-theme-shell[data-theme="portrait"] .preview-empty {

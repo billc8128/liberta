@@ -4,7 +4,6 @@ import { currentSession } from "@/lib/auth/session";
 import {
   addProjectMessage,
   ProjectAccessError,
-  ProjectBusyError,
 } from "@/server/projects/service";
 
 interface ProjectRouteContext {
@@ -51,9 +50,6 @@ export async function POST(request: Request, context: ProjectRouteContext) {
     }
     if (error instanceof ProjectAccessError) {
       return Response.json({ error: "PROJECT_NOT_FOUND" }, { status: 404 });
-    }
-    if (error instanceof ProjectBusyError) {
-      return Response.json({ error: "PROJECT_BUSY" }, { status: 409 });
     }
     console.error("Project message failed", error);
     return Response.json({ error: "MESSAGE_FAILED" }, { status: 503 });

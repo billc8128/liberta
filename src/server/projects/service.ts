@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { arkEnv } from "@/lib/env/server";
@@ -61,33 +61,23 @@ export async function addProjectMessage(input: {
   const db = database();
 
   const result = await db.transaction(async (transaction) => {
-    const [record] = await transaction
-      .select({ project: projects, activeRunId: agentRuns.id })
+    const [project] = await transaction
+      .select()
       .from(projects)
-      .leftJoin(
-        agentRuns,
-        and(
-          eq(agentRuns.projectId, projects.id),
-          inArray(agentRuns.status, ["queued", "running"]),
-        ),
-      )
       .where(and(eq(projects.id, input.projectId), eq(projects.ownerId, input.ownerId)))
       .limit(1);
-    if (!record) {
+    if (!project) {
       throw new ProjectAccessError();
-    }
-    if (record.activeRunId) {
-      throw new ProjectBusyError();
     }
 
     const [message] = await transaction
       .insert(messages)
-      .values({ projectId: record.project.id, role: "user", content: prompt })
+      .values({ projectId: project.id, role: "user", content: prompt })
       .returning();
     const [run] = await transaction
       .insert(agentRuns)
       .values({
-        projectId: record.project.id,
+        projectId: project.id,
         promptMessageId: message.id,
         modelProvider: "volcengine-agent-plan",
         modelId: model.ARK_MODEL_ID,
@@ -201,12 +191,31 @@ export async function getProjectState(ownerId: string, projectId: string) {
     .from(messages)
     .where(eq(messages.projectId, projectId))
     .orderBy(asc(messages.createdAt));
-  const [run] = await db
+  const [activeRun] = await db
     .select()
     .from(agentRuns)
-    .where(eq(agentRuns.projectId, projectId))
-    .orderBy(desc(agentRuns.createdAt))
+    .where(
+      and(
+        eq(agentRuns.projectId, projectId),
+        inArray(agentRuns.status, ["queued", "running"]),
+      ),
+    )
+    .orderBy(
+      sql`case when ${agentRuns.status} = 'running' then 0 else 1 end`,
+      asc(agentRuns.createdAt),
+    )
     .limit(1);
+  const latestRun = activeRun
+    ? undefined
+    : (
+        await db
+          .select()
+          .from(agentRuns)
+          .where(eq(agentRuns.projectId, projectId))
+          .orderBy(desc(agentRuns.createdAt))
+          .limit(1)
+      )[0];
+  const run = activeRun ?? latestRun;
   const events = run
     ? await db
         .select()
@@ -233,11 +242,5 @@ export async function getOwnedProject(ownerId: string, projectId: string) {
 export class ProjectAccessError extends Error {
   constructor() {
     super("Project was not found.");
-  }
-}
-
-export class ProjectBusyError extends Error {
-  constructor() {
-    super("The project agent is already working.");
   }
 }

@@ -81,10 +81,10 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
   }, [state.project.id]);
 
   useEffect(() => {
-    if (state.project.status !== "ready" || previewUrl) return;
+    if (state.project.status !== "ready") return;
     const timer = window.setTimeout(() => void refreshPreview(), 0);
     return () => window.clearTimeout(timer);
-  }, [previewUrl, refreshPreview, state.project.status]);
+  }, [refreshPreview, state.project.status, state.project.updatedAt]);
 
   useEffect(() => {
     chatEnd.current?.scrollIntoView({ behavior: "smooth" });
@@ -121,17 +121,12 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
         body: JSON.stringify({ prompt }),
       });
       if (!response.ok) {
-        const result = (await response.json()) as { error?: string };
         setState((current) => ({
           ...current,
           messages: current.messages.filter((message) => message.id !== optimisticId),
         }));
-        setChatPrompt(prompt);
-        setMessageError(
-          result.error === "PROJECT_BUSY"
-            ? "The agent is still working on the previous message."
-            : "This message could not be sent.",
-        );
+        setChatPrompt((current) => current || prompt);
+        setMessageError("This message could not be sent.");
         return;
       }
 
@@ -148,16 +143,18 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
           messages: messages.some((message) => message.id === result.message.id)
             ? messages
             : [...messages, result.message],
-          run: current.run?.id === result.run.id ? current.run : result.run,
+          run:
+            current.run?.status === "queued" || current.run?.status === "running"
+              ? current.run
+              : result.run,
         };
       });
-      setPreviewUrl(undefined);
     } catch {
       setState((current) => ({
         ...current,
         messages: current.messages.filter((message) => message.id !== optimisticId),
       }));
-      setChatPrompt(prompt);
+      setChatPrompt((current) => current || prompt);
       setMessageError("This message could not be sent.");
     } finally {
       setSending(false);
@@ -205,17 +202,6 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
             <div className="agent-activity">
               <span aria-hidden="true" />
               <p>{sending && !runActive ? "Sending…" : activity}</p>
-              {runActive && (
-                <button
-                  type="button"
-                  onClick={() => void stopRun()}
-                  disabled={stopping || state.run?.cancelRequestedAt !== null}
-                  aria-label="Stop agent"
-                >
-                  <Square size={10} fill="currentColor" />
-                  {stopping || state.run?.cancelRequestedAt ? "Stopping" : "Stop"}
-                </button>
-              )}
             </div>
           )}
           {state.run?.status === "failed" && (
@@ -233,18 +219,34 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
             name="prompt"
             rows={2}
             placeholder="Tell the agent what to change…"
-            disabled={agentActive || sending}
             value={chatPrompt}
             onChange={(event) => setChatPrompt(event.target.value)}
             onKeyDown={submitOnEnter}
           />
-          <button
-            type="submit"
-            aria-label="Send message"
-            disabled={agentActive || sending || !chatPrompt.trim()}
-          >
-            <ArrowUp size={18} />
-          </button>
+          <div className="composer-footer">
+            <span>{runActive ? "Send another message — it will run next" : "Enter to send · Shift + Enter for a new line"}</span>
+            <div className="composer-actions">
+              {runActive && (
+                <button
+                  className="composer-cancel"
+                  type="button"
+                  onClick={() => void stopRun()}
+                  disabled={stopping || state.run?.cancelRequestedAt !== null}
+                >
+                  <Square size={10} fill="currentColor" />
+                  {stopping || state.run?.cancelRequestedAt ? "Stopping…" : "Cancel"}
+                </button>
+              )}
+              <button
+                className="composer-send"
+                type="submit"
+                aria-label="Send message"
+                disabled={sending || !chatPrompt.trim()}
+              >
+                <ArrowUp size={18} />
+              </button>
+            </div>
+          </div>
           {messageError && <p role="alert">{messageError}</p>}
         </form>
       </aside>
@@ -252,7 +254,7 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
       <section className="preview-panel">
         <header className="preview-toolbar">
           <div className="preview-label"><span /> Live preview</div>
-          <div className="device-switcher" aria-label="Preview size">
+          <div className="device-switcher" role="group" aria-label="Preview size">
             <button
               className={view === "desktop" ? "active" : undefined}
               onClick={() => setView("desktop")}
@@ -272,30 +274,31 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
             >
               <RefreshCw size={16} />
             </button>
-            <a
-              href={previewUrl}
-              target="_blank"
-              rel="noreferrer"
+            <button
+              type="button"
+              onClick={() => previewUrl && window.open(previewUrl, "_blank", "noopener,noreferrer")}
               aria-label="Open preview in a new tab"
-              aria-disabled={!previewUrl}
-            ><ExternalLink size={16} /></a>
+              disabled={!previewUrl}
+            ><ExternalLink size={16} /></button>
           </div>
         </header>
 
         <div className={`preview-stage ${view}`}>
-          {previewUrl ? (
-            <iframe
-              key={previewVersion}
-              src={previewUrl}
-              title={`${state.project.name} preview`}
-              allow="clipboard-read; clipboard-write"
-            />
-          ) : (
-            <div className="preview-empty">
-              <div className="aperture" aria-hidden="true" />
-              <p>{previewStatus(state)}</p>
-            </div>
-          )}
+          <div className="preview-canvas">
+            {previewUrl ? (
+              <iframe
+                key={previewVersion}
+                src={previewUrl}
+                title={`${state.project.name} preview`}
+                allow="clipboard-read; clipboard-write"
+              />
+            ) : (
+              <div className="preview-empty">
+                <div className="aperture" aria-hidden="true" />
+                <p>{previewStatus(state)}</p>
+              </div>
+            )}
+          </div>
         </div>
       </section>
     </main>
