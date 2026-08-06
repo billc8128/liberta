@@ -1,14 +1,64 @@
-export function addPreviewBase(html: string, previewUrl: string) {
-  const baseUrl = new URL("/", previewUrl).toString();
-  const base = `<base href="${escapeAttribute(baseUrl)}">`;
+export function projectPreviewProxyPath(projectId: string) {
+  return `/api/projects/${encodeURIComponent(projectId)}/preview/proxy/`;
+}
 
-  if (/<base\s/i.test(html)) {
-    return html.replace(/<base\b[^>]*>/i, base);
+export function rewritePreviewText(
+  content: string,
+  contentType: string,
+  proxyPath: string,
+) {
+  if (/text\/html|application\/xhtml\+xml/i.test(contentType)) {
+    return rewriteHtml(content, proxyPath);
   }
-  if (/<head\b[^>]*>/i.test(html)) {
-    return html.replace(/<head\b[^>]*>/i, (head) => `${head}${base}`);
+  if (/javascript|ecmascript|typescript/i.test(contentType)) {
+    return rewriteJavaScript(content, proxyPath);
   }
-  return `${base}${html}`;
+  if (/text\/css/i.test(contentType)) {
+    return rewriteCss(content, proxyPath);
+  }
+  return content;
+}
+
+export function isRewritablePreviewContent(contentType: string) {
+  return /text\/html|application\/xhtml\+xml|javascript|ecmascript|typescript|text\/css/i.test(
+    contentType,
+  );
+}
+
+function rewriteHtml(html: string, proxyPath: string) {
+  const rewrittenAttributes = html
+    .replace(
+      /(\b(?:src|href|action|poster)\s*=\s*["'])\/(?!\/)/gi,
+      `$1${proxyPath}`,
+    )
+    .replace(/(\bsrcset\s*=\s*["'])([^"']*)(["'])/gi, (_match, open, value, close) =>
+      `${open}${String(value).replace(/(^|,\s*)\/(?!\/)/g, `$1${proxyPath}`)}${close}`,
+    )
+    .replace(/(<script\b(?![^>]*\bsrc=)[^>]*>)([\s\S]*?)(<\/script>)/gi, (_match, open, script, close) =>
+      `${open}${rewriteJavaScript(script, proxyPath)}${close}`,
+    );
+  const base = `<base href="${escapeAttribute(proxyPath)}">`;
+
+  if (/<base\s/i.test(rewrittenAttributes)) {
+    return rewrittenAttributes.replace(/<base\b[^>]*>/i, base);
+  }
+  if (/<head\b[^>]*>/i.test(rewrittenAttributes)) {
+    return rewrittenAttributes.replace(
+      /<head\b[^>]*>/i,
+      (head) => `${head}${base}`,
+    );
+  }
+  return `${base}${rewrittenAttributes}`;
+}
+
+function rewriteJavaScript(source: string, proxyPath: string) {
+  return source.replace(/(["'`])\/(?!\/)/g, `$1${proxyPath}`);
+}
+
+function rewriteCss(source: string, proxyPath: string) {
+  return source
+    .replace(/(url\(\s*["']?)\/(?!\/)/gi, `$1${proxyPath}`)
+    .replace(/(@import\s+["'])\/(?!\/)/gi, `$1${proxyPath}`);
 }
 
 function escapeAttribute(value: string) {

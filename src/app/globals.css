@@ -3280,6 +3280,52 @@ a:focus-visible {
   border: 0;
 }
 
+.preview-feedback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  gap: 8px;
+  padding: 24px;
+  color: var(--workspace-ink);
+  text-align: center;
+  background: rgba(18, 21, 19, 0.92);
+  place-content: center;
+  place-items: center;
+}
+
+.preview-feedback > span {
+  width: 22px;
+  height: 22px;
+  margin-bottom: 6px;
+  border: 2px solid rgba(255, 252, 225, 0.18);
+  border-top-color: var(--workspace-accent);
+  border-radius: 50%;
+  animation: preview-spin 700ms linear infinite;
+}
+
+.preview-feedback strong {
+  font-size: 14px;
+}
+
+.preview-feedback p {
+  margin: 0;
+  color: var(--workspace-muted);
+  font-size: 12px;
+}
+
+.preview-empty button {
+  padding: 8px 14px;
+  color: var(--workspace-ink);
+  cursor: pointer;
+  background: rgba(255, 252, 225, 0.07);
+  border: 1px solid rgba(255, 252, 225, 0.12);
+  border-radius: 999px;
+}
+
+@keyframes preview-spin {
+  to { transform: rotate(360deg); }
+}
+
 .standalone-preview,
 .standalone-preview iframe {
   width: 100%;
@@ -3569,6 +3615,22 @@ a:focus-visible {
 
 .marketing-theme-shell[data-theme="portrait"] .preview-empty {
   color: var(--workspace-muted);
+}
+
+.marketing-theme-shell[data-theme="portrait"] .preview-feedback {
+  color: var(--workspace-ink);
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.marketing-theme-shell[data-theme="portrait"] .preview-feedback > span {
+  border-color: rgba(8, 48, 76, 0.14);
+  border-top-color: var(--workspace-ink);
+}
+
+.marketing-theme-shell[data-theme="portrait"] .preview-empty button {
+  color: var(--workspace-ink);
+  background: #ffffff;
+  border-color: rgba(8, 48, 76, 0.12);
 }
 
 .marketing-theme-shell[data-theme="portrait"] .aperture {

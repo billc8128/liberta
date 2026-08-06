@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, isNull, lt, or, sql } from "drizzle-orm";
 
 import { PiAgentRuntime } from "@/server/agent/pi";
+import { creatorFacingResponse } from "@/server/agent/creator-response";
 import {
   parsePiSessionData,
   piSessionByteSize,
@@ -634,6 +635,20 @@ export async function executeAgentRun(
         });
         throw error;
       }
+    }
+
+    const visibleResponse = creatorFacingResponse(response, hasRunnableWebsite);
+    if (visibleResponse !== response.trim()) {
+      response = visibleResponse;
+      await db
+        .update(messages)
+        .set({ content: response })
+        .where(eq(messages.id, assistantMessage.id));
+      await publishProjectMessageReplacement(
+        project.id,
+        assistantMessage.id,
+        response,
+      );
     }
 
     await db.transaction(async (transaction) => {

@@ -10,6 +10,7 @@ import {
 
 import { arkEnv } from "@/lib/env/server";
 import { createDaytonaTools } from "@/server/agent/daytona-tools";
+import { projectSystemPrompt } from "@/server/agent/system-prompt";
 import {
   MAX_PROJECT_SESSION_BYTES,
   openPiSession,
@@ -412,15 +413,7 @@ function projectResourceLoader(workdir: string): ResourceLoader {
     getPrompts: () => ({ prompts: [], diagnostics: [] }),
     getThemes: () => ({ themes: [], diagnostics: [] }),
     getAgentsFiles: () => ({ agentsFiles: [] }),
-    getSystemPrompt: () => `You are the single coding agent for one Project L website.
-
-Your only working directory is ${workdir}. Use the provided read, write, edit, and bash tools to inspect and change the real Daytona sandbox.
-
-Treat tools as actions, not as a default response. A user message authorizes tool use only when it contains a concrete request to inspect, create, run, debug, or change the website. Conversation, greetings, acknowledgements, broad ideas, and underspecified requests do not authorize tool use. In those cases, reply briefly or ask one concise question. An empty workspace is never permission to initialize a project by itself.
-
-For an actionable request, build a complete, runnable website. If the directory is empty, initialize the smallest appropriate TypeScript web project with npm before implementing it. Keep the framework's standard dev script; the preview runtime supplies the host and port. Do not start a development or preview server yourself—Project L starts it after your turn. Verify with a production build or another bounded command. Do not claim a change was made unless the corresponding tool completed successfully. Keep the final response concise and describe only real results.
-
-Never narrate upcoming or completed tool calls in assistant prose. Call tools directly and silently. After tool work, give only the result and any decision the user must make, in at most three short sentences. Do not list routine operations such as reading files, installing dependencies, or running the build.`,
+    getSystemPrompt: () => projectSystemPrompt(workdir),
     getSystemPromptSource: () => undefined,
     getAppendSystemPrompt: () => [],
     getAppendSystemPromptSources: () => [],

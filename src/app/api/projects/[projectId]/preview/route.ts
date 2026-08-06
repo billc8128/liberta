@@ -19,8 +19,8 @@ export async function GET(_request: Request, context: ProjectRouteContext) {
 
   try {
     const { projectId } = await context.params;
-    const url = await prepareProjectPreview(session.user.id, projectId);
-    return Response.json({ url });
+    await prepareProjectPreview(session.user.id, projectId);
+    return Response.json({ ready: true });
   } catch (error) {
     if (error instanceof ProjectAccessError) {
       return Response.json({ error: "PROJECT_NOT_FOUND" }, { status: 404 });

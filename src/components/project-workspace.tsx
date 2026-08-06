@@ -25,7 +25,9 @@ interface ProjectWorkspaceProps {
 export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
   const [state, setState] = useState(initialState);
   const [view, setView] = useState<"desktop" | "mobile">("desktop");
-  const [previewUrl, setPreviewUrl] = useState<string>();
+  const [previewReady, setPreviewReady] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string>();
   const [previewVersion, setPreviewVersion] = useState(0);
   const [sending, setSending] = useState(false);
   const [chatPrompt, setChatPrompt] = useState("");
@@ -44,19 +46,29 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
   const refreshPreview = useCallback(async () => {
     if (previewRefreshing.current) return false;
     previewRefreshing.current = true;
+    setPreviewLoading(true);
+    setPreviewError(undefined);
     try {
       const response = await fetch(`/api/projects/${state.project.id}/preview`, {
         cache: "no-store",
       });
-      if (!response.ok) return false;
-      const result = (await response.json()) as { url: string };
-      setPreviewUrl(result.url);
+      if (!response.ok) {
+        if (state.project.status === "ready") {
+          setPreviewError("The preview could not load. Try again in a moment.");
+        }
+        return false;
+      }
+      setPreviewReady(true);
       setPreviewVersion((version) => version + 1);
       return true;
+    } catch {
+      setPreviewError("The preview could not load. Try again in a moment.");
+      return false;
     } finally {
+      setPreviewLoading(false);
       previewRefreshing.current = false;
     }
-  }, [state.project.id]);
+  }, [state.project.id, state.project.status]);
 
   useEffect(() => {
     const events = new EventSource(`/api/projects/${state.project.id}/events`);
@@ -252,7 +264,7 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
   const liveOutput = Object.values(runOutputs)
     .filter((output) => output.runId === state.run?.id)
     .at(-1)?.output;
-  const previewDocumentUrl = `/api/projects/${state.project.id}/preview/document?version=${previewVersion}`;
+  const previewDocumentUrl = `/api/projects/${state.project.id}/preview/proxy/?version=${previewVersion}`;
 
   return (
     <main className="workspace-shell">
@@ -371,7 +383,7 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
             <button
               type="button"
               onClick={() =>
-                previewUrl &&
+                previewReady &&
                 window.open(
                   `/projects/${state.project.id}/preview`,
                   "_blank",
@@ -379,25 +391,40 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
                 )
               }
               aria-label="Open preview in a new tab"
-              disabled={!previewUrl}
+              disabled={!previewReady}
             ><ExternalLink size={16} /></button>
           </div>
         </header>
 
         <div className={`preview-stage ${view}`}>
           <div className="preview-canvas">
-            {previewUrl ? (
-              <iframe
-                key={previewVersion}
-                src={previewDocumentUrl}
-                title={`${state.project.name} preview`}
-                allow="clipboard-read; clipboard-write"
-                sandbox="allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-downloads"
-              />
+            {previewReady ? (
+              <>
+                <iframe
+                  key={previewVersion}
+                  src={previewDocumentUrl}
+                  title={`${state.project.name} preview`}
+                  allow="clipboard-read; clipboard-write"
+                  sandbox="allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-downloads"
+                  onLoad={() => setPreviewLoading(false)}
+                />
+                {previewLoading && (
+                  <div className="preview-feedback" aria-live="polite">
+                    <span aria-hidden="true" />
+                    <strong>Preparing your preview</strong>
+                    <p>Your site will appear here automatically.</p>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="preview-empty">
                 <div className="aperture" aria-hidden="true" />
-                <p>{previewStatus(state)}</p>
+                <p>{previewError ?? previewStatus(state)}</p>
+                {previewError && (
+                  <button type="button" onClick={() => void refreshPreview()}>
+                    Try again
+                  </button>
+                )}
               </div>
             )}
           </div>

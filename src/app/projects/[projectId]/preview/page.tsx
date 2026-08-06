@@ -23,7 +23,7 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
   return (
     <main className="standalone-preview">
       <iframe
-        src={`/api/projects/${project.id}/preview/document`}
+        src={`/api/projects/${project.id}/preview/proxy/`}
         title={`${project.name} preview`}
         allow="clipboard-read; clipboard-write"
         sandbox="allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-downloads"
