@@ -34,8 +34,9 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
       <iframe
         src={`/api/projects/${project.id}/preview/proxy/${encodeURIComponent(token)}/`}
         title={`${project.name} preview`}
-        allow="clipboard-read; clipboard-write"
+        allow="clipboard-read; clipboard-write; fullscreen"
         sandbox="allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-downloads"
+        allowFullScreen
       />
     </main>
   );

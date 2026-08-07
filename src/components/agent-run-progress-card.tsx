@@ -29,55 +29,58 @@ export function AgentRunProgressCard({
   const elapsed = formatRunDuration(startedAt, now, run.completedAt ?? undefined);
   const liveOutput = output ? terminalTail(output) : "";
   const activeStep = [...steps].reverse().find((step) => step.status === "active");
-  const heading =
+  const statusLabel =
     run.status === "queued"
-      ? "Your request is queued"
+      ? activeStep?.label ?? "Waiting for an available agent"
       : run.cancelRequestedAt
-        ? "Stopping the agent"
-        : "Building your project";
+        ? "Stopping"
+        : activeStep?.label ?? "Working on your site";
+  const completedCount = visibleSteps.filter((step) => step.status === "completed").length;
+  const showActivity = visibleSteps.length > 1 || Boolean(liveOutput);
 
   return (
     <section className="agent-turn" aria-label="Agent progress">
       <span className="agent-spark" aria-hidden="true">✦</span>
       <div className="agent-turn-body">
         <p className="sr-only" aria-live="polite">
-          {activeStep?.label ?? heading}
+          {statusLabel}
         </p>
-        <header className="agent-turn-heading">
-          <strong>{heading}</strong>
+        <div
+          className="agent-activity-line"
+          data-status={run.cancelRequestedAt ? "stopping" : run.status}
+        >
+          <span className="agent-activity-spinner" aria-hidden="true" />
+          <strong>{statusLabel}</strong>
           <time>{elapsed}</time>
-        </header>
+        </div>
 
-        <ol className="agent-progress-rail">
-          {visibleSteps.map((step) => (
-            <li key={step.id} data-status={step.status}>
-              <span className="agent-progress-marker" aria-hidden="true">
-                {step.status === "completed" ? (
-                  <Check size={10} strokeWidth={2.5} />
-                ) : step.status === "failed" ? (
-                  <CircleAlert size={11} />
-                ) : (
-                  <span />
-                )}
-              </span>
-              <div>
-                <span>{step.label}</span>
-                {step.detail && <small>{step.detail}</small>}
-              </div>
-              <time>
-                {formatRunDuration(step.startedAt, now, step.completedAt)}
-              </time>
-            </li>
-          ))}
-        </ol>
-
-        {liveOutput && (
-          <details className="agent-live-output" open>
+        {showActivity && (
+          <details className="agent-activity-details">
             <summary>
-              Live output
+              {completedCount > 0
+                ? `${completedCount} ${completedCount === 1 ? "action" : "actions"} completed`
+                : "View activity"}
               <ChevronDown size={13} aria-hidden="true" />
             </summary>
-            <pre>{liveOutput}</pre>
+            <div className="agent-activity-detail-body">
+              <ol className="agent-activity-list">
+                {visibleSteps.map((step) => (
+                  <li key={step.id} data-status={step.status}>
+                    <span aria-hidden="true">
+                      {step.status === "completed" ? (
+                        <Check size={11} strokeWidth={2.4} />
+                      ) : step.status === "failed" ? (
+                        <CircleAlert size={11} />
+                      ) : (
+                        <span />
+                      )}
+                    </span>
+                    {step.label}
+                  </li>
+                ))}
+              </ol>
+              {liveOutput && <pre aria-label="Live output">{liveOutput}</pre>}
+            </div>
           </details>
         )}
 

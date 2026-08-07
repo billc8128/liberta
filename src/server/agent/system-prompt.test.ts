@@ -8,6 +8,8 @@ describe("projectSystemPrompt", () => {
 
     expect(prompt).toContain("non-technical content creator");
     expect(prompt).toContain("Never ask the creator to open or edit source files");
+    expect(prompt).toContain("Never explain browser APIs");
+    expect(prompt).toContain("say what now works");
     expect(prompt).toContain("Never tell the creator how to start the site or preview");
     expect(prompt).toContain("review it in the preview");
   });

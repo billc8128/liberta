@@ -1,5 +1,5 @@
 const TECHNICAL_INSTRUCTION =
-  /(?:\b(?:npm|pnpm|yarn|npx|bun)\s|\b(?:src|app|public|components?|pages?)\/[^\s`]+|\b[\w.-]+\.(?:tsx?|jsx?|css|json)\b|\b(?:localhost|0\.0\.0\.0|dev server|development server)\b|(?:打开|编辑|修改).{0,20}(?:文件|配置区|源码|代码)|(?:启动方式|开发服务器|预览环境).{0,30}(?:运行|启动|命令))/i;
+  /(?:\b(?:npm|pnpm|yarn|npx|bun)\s|\b(?:src|app|public|components?|pages?)\/[^\s`]+|\b[\w.-]+\.(?:tsx?|jsx?|css|json)\b|\b(?:localhost|0\.0\.0\.0|dev server|development server|navigator\.[\w.]+|document\.[\w.]+|window\.[\w.]+|execCommand|textarea|iframe|https?|cors|csp|dom|same-origin|sandbox|permissions? policy)\b|(?:打开|编辑|修改).{0,20}(?:文件|配置区|源码|代码)|(?:启动方式|开发服务器|预览环境).{0,30}(?:运行|启动|命令))/i;
 
 export function creatorFacingResponse(content: string, previewReady: boolean) {
   const usesChinese = /[\u3400-\u9fff]/.test(content);

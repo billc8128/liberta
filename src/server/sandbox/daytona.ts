@@ -140,6 +140,9 @@ export class DaytonaSandboxRuntime implements SandboxRuntime {
   async previewUrl(sandboxId: string, port = DEFAULT_PREVIEW_PORT) {
     const sandbox = await this.ensureRunning(sandboxId);
     const preview = await sandbox.getSignedPreviewUrl(port, 60 * 60);
+    if (new URL(preview.url).protocol !== "https:") {
+      throw new Error("Daytona returned a non-HTTPS preview URL.");
+    }
     return preview.url;
   }
 }

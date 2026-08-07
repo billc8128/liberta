@@ -416,8 +416,9 @@ export function ProjectWorkspace({ initialState }: ProjectWorkspaceProps) {
                   key={previewVersion}
                   src={previewDocumentUrl}
                   title={`${state.project.name} preview`}
-                  allow="clipboard-read; clipboard-write"
+                  allow="clipboard-read; clipboard-write; fullscreen"
                   sandbox="allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-downloads"
+                  allowFullScreen
                   onLoad={() => setPreviewLoading(false)}
                 />
                 {previewLoading && (
