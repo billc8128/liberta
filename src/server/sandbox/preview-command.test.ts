@@ -10,7 +10,9 @@ describe("previewCommand", () => {
     const command = previewCommand(3000);
 
     expect(command).toContain("next dev --hostname 0.0.0.0 --port 3000");
-    expect(command).toContain("vite --host 0.0.0.0 --port 3000");
+    expect(command).toContain("createServer");
+    expect(command).toContain("port: 3000");
+    expect(command).toContain("hmr: false");
   });
 
   it("does not append Vite flags to an arbitrary npm dev script", () => {
